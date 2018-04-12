@@ -79,7 +79,7 @@ def photo_loop():
     no_photo_taken = 0
 
     # TODO: insert infinite loop here
-    for i in range(10):
+    for i in range(20):
 
         # calculate cycle time
         while now < last_time + timedelta(seconds=interval):
@@ -134,7 +134,7 @@ if __name__ == '__main__':
     interval = general_conf.getint('interval seconds')
 
     # connect relays module and restart camera
-    camera = gpiozero.DigitalOutputDevice(pin=3, active_high=True)
+    camera = gpiozero.DigitalOutputDevice(pin=2, active_high=True)
     restart_camera()
 
     # check if the clock is possibly set correctly (this script should run on a Raspberry Pi without RTC)
@@ -142,3 +142,4 @@ if __name__ == '__main__':
         photo_loop()
     else:
         print('Systemdatum falsch')
+
