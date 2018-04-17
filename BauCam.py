@@ -71,6 +71,7 @@ def restart_camera():
     camera.off()
     sleep(5)
     camera.on()
+    sleep(5)
 
 
 def photo_loop():
