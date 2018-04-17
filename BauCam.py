@@ -49,10 +49,10 @@ def extract_exif(file_path, timestamp):
     # read EXIF tags from the image
     with open(file_path, 'rb') as f:
         all_tags = exifread.process_file(f)
-    exif = {'exposure_time': all_tags['EXIF ExposureTime'],
-            'iso': all_tags['EXIF ISOSpeedRatings'],
-            'aperture': all_tags['EXIF FNumber'],
-            'timestamp': all_tags['EXIF DateTimeOriginal']}
+    exif = {'exposure_time': str(all_tags['EXIF ExposureTime']),
+            'iso': str(all_tags['EXIF ISOSpeedRatings']),
+            'aperture': str(all_tags['EXIF FNumber']),
+            'timestamp': str(all_tags['EXIF DateTimeOriginal'])}
 
     # Debugging output
     # print('Dateiname', file_path)
@@ -73,8 +73,8 @@ def store_in_database(timestamp, filename, exif_tags, output):
     cur.execute('CREATE TABLE IF NOT EXISTS '
                 'images (timestamp, filename, exposure_time, iso, aperture, exif_timestamp, output)')
     cur.execute('INSERT INTO images (timestamp, filename, exposure_time, iso, aperture, exif_timestamp, output) '
-                'VALUES (?, ?, ?, ?, ?, ?, ?)', (timestamp, filename, exif_tags['exposure_time'],
-                exif_tags['iso'], exif_tags['aperture'], exif_tags['timestamp'], output))
+                'VALUES (?, ?, ?, ?, ?, ?, ?)', (timestamp, filename, exif_tags['exposure_time'], exif_tags['iso'],
+                                                 exif_tags['aperture'], exif_tags['timestamp'], output))
     conn.commit()
     conn.close()
 
