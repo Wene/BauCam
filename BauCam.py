@@ -23,20 +23,20 @@ def take_photo(capture_path, local_path, pic_name):
         out_bytes = subprocess.run(['gphoto2', '--capture-image-and-download'], timeout=15,
                                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT).stdout
         output = str(out_bytes, 'utf-8')
-        print('Ausgabe:')
-        print('---')
-        print(str(output))
-        ret = ['']
+        # print('Ausgabe:')
+        # print('---')
+        # print(str(output))
+        final_names = ['']
         files = os.listdir()
         for file_name in files:
             base, ext = os.path.splitext(file_name)
             new_name = pic_name + ext
             os.rename(file_name, os.path.join(local_path, new_name))
             if '.jpg' == ext.lower() or '.jpeg' == ext.lower():
-                ret[0] = new_name
+                final_names[0] = new_name
             else:
-                ret.append(new_name)
-        return ret
+                final_names.append(new_name)
+        return final_names, output
     except subprocess.TimeoutExpired as e:
         print('Timeout beim Versuch zu fotografieren...')
     except Exception as e:
@@ -48,21 +48,33 @@ def take_photo(capture_path, local_path, pic_name):
 def extract_exif(file_path, timestamp):
     # read EXIF tags from the image
     with open(file_path, 'rb') as f:
-        exif_tags = exifread.process_file(f)
+        all_tags = exifread.process_file(f)
+    exif = {'exposure_time': all_tags['EXIF ExposureTime'],
+            'iso': all_tags['EXIF ISOSpeedRatings'],
+            'aperture': all_tags['EXIF FNumber'],
+            'timestamp': all_tags['EXIF DateTimeOriginal']}
 
     # Debugging output
-    print('Dateiname', file_path)
-    print('Timestamp', timestamp.strftime('%Y-%m-%d %H:%M:%S'))
-    print('Verschlusszeit', exif_tags['EXIF ExposureTime'])
-    print('ISO', exif_tags['EXIF ISOSpeedRatings'])
-    print('Blende', exif_tags['EXIF FNumber'])
-    print('Aufnahmedatum', exif_tags['EXIF DateTimeOriginal'])
+    # print('Dateiname', file_path)
+    # print('Timestamp', timestamp.strftime('%Y-%m-%d %H:%M:%S'))
+    # print('Verschlusszeit', all_tags['EXIF ExposureTime'])
+    # print('ISO', all_tags['EXIF ISOSpeedRatings']
+    # print('Blende', all_tags['EXIF FNumber'])
+    # print('Aufnahmedatum', all_tags['EXIF DateTimeOriginal'])
 
+    return exif
+
+
+def store_in_database(timestamp, filename, exif_tags, output):
     # store data in database
     os.chdir(local_path)
     conn = sqlite3.connect('images.db')
     cur = conn.cursor()
-    cur.execute('CREATE TABLE IF NOT EXISTS images (timestamp, filename)')
+    cur.execute('CREATE TABLE IF NOT EXISTS '
+                'images (timestamp, filename, exposure_time, iso, aperture, exif_timestamp, output)')
+    cur.execute('INSERT INTO images (timestamp, filename, exposure_time, iso, aperture, exif_timestamp, output) '
+                'VALUES (?, ?, ?, ?, ?, ?, ?)', (timestamp, filename, exif_tags['exposure_time'],
+                exif_tags['iso'], exif_tags['aperture'], exif_tags['timestamp'], output))
     conn.commit()
     conn.close()
 
@@ -92,13 +104,15 @@ def photo_loop():
 
         # take a photo
         pic_name = now.strftime('img_%Y-%m-%d_%H-%M-%S')
-        files = take_photo(capture_path, local_path, pic_name)
+        files, output = take_photo(capture_path, local_path, pic_name)
         if files[0] != '':
             no_photo_taken = 0
             exif_path = os.path.join(local_path, files[0])
-            extract_exif(exif_path, now)
+            exif_tags = extract_exif(exif_path, now)
+            store_in_database(now, files[0], exif_tags, output)
         else:
             no_photo_taken += 1
+            store_in_database(now, '', {'exposure_time': '', 'iso': '', 'aperture': '', 'timestamp': ''}, output)
         if no_photo_taken > 3:
             print('rebooting everything')
             subprocess.run(['sudo', 'reboot'])  # works only on systems with sudo without password (RasPi)
