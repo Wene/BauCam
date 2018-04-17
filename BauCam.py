@@ -98,13 +98,15 @@ def photo_loop():
             extract_exif(exif_path, now)
         else:
             no_photo_taken += 1
-        # TODO: take actual rebooting measures
         if no_photo_taken > 3:
             print('rebooting everything')
-            sys.exit('reboot required')
+            subprocess.run(['sudo', 'reboot'])  # works only on systems with sudo without password (RasPi)
+            sys.exit('reboot triggered')
         if no_photo_taken > 2:
             print('rebooting camera')
             restart_camera()
+        if no_photo_taken > 0:
+            print('system will be rebooted after', 4 - no_photo_taken, 'failures.')
 
 
 if __name__ == '__main__':
