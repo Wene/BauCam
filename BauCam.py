@@ -45,29 +45,23 @@ def take_photo(capture_path, local_path, pic_name):
         print(e)
 
 
-def extract_exif(file_path, timestamp):
+def extract_exif(file_path):
     # read EXIF tags from the image
+    exif_date_format = '%Y:%m:%d %H:%M:%S'
     with open(file_path, 'rb') as f:
         all_tags = exifread.process_file(f)
-    exif = {'exposure_time': str(all_tags['EXIF ExposureTime']),
-            'iso': str(all_tags['EXIF ISOSpeedRatings']),
-            'aperture': str(all_tags['EXIF FNumber']),
-            'timestamp': str(all_tags['EXIF DateTimeOriginal'])}
-
-    # Debugging output
-    # print('Dateiname', file_path)
-    # print('Timestamp', timestamp.strftime('%Y-%m-%d %H:%M:%S'))
-    # print('Verschlusszeit', all_tags['EXIF ExposureTime'])
-    # print('ISO', all_tags['EXIF ISOSpeedRatings']
-    # print('Blende', all_tags['EXIF FNumber'])
-    # print('Aufnahmedatum', all_tags['EXIF DateTimeOriginal'])
-
+    exif = {'exposure_time': str(all_tags['EXIF ExposureTime']),    # 1/200
+            'iso': str(all_tags['EXIF ISOSpeedRatings']),           # 400
+            'aperture': str(all_tags['EXIF FNumber']),              # 9/2
+            'timestamp': datetime.strptime(str(all_tags['EXIF DateTimeOriginal']), exif_date_format)}
     return exif
 
 
-def store_in_database(timestamp, filename, exif_tags, output):
+def store_in_database(timestamp, output, filename=None, exif_tags=None):
     # store data in database
     os.chdir(local_path)
+    if exif_tags is None:
+        exif_tags = {'exposure_time': '', 'iso': '', 'aperture': '', 'timestamp': ''}
     conn = sqlite3.connect('images.db')
     cur = conn.cursor()
     cur.execute('CREATE TABLE IF NOT EXISTS '
@@ -107,12 +101,12 @@ def photo_loop():
         files, output = take_photo(capture_path, local_path, pic_name)
         if files[0] != '':
             no_photo_taken = 0
-            exif_path = os.path.join(local_path, files[0])
-            exif_tags = extract_exif(exif_path, now)
-            store_in_database(now, files[0], exif_tags, output)
+            jpeg_path = os.path.join(local_path, files[0])
+            exif_tags = extract_exif(jpeg_path)
+            store_in_database(now, output, filename=files[0], exif_tags=exif_tags)
         else:
             no_photo_taken += 1
-            store_in_database(now, '', {'exposure_time': '', 'iso': '', 'aperture': '', 'timestamp': ''}, output)
+            store_in_database(now, output)
         if no_photo_taken > 3:
             print('rebooting everything')
             subprocess.run(['sudo', 'reboot'])  # works only on systems with sudo without password (RasPi)
