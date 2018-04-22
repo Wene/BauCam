@@ -50,25 +50,39 @@ def extract_exif(file_path):
     exif_date_format = '%Y:%m:%d %H:%M:%S'
     with open(file_path, 'rb') as f:
         all_tags = exifread.process_file(f)
-    exif = {'exposure_time': str(all_tags['EXIF ExposureTime']),    # 1/200
-            'iso': str(all_tags['EXIF ISOSpeedRatings']),           # 400
-            'aperture': str(all_tags['EXIF FNumber']),              # 9/2
-            'timestamp': datetime.strptime(str(all_tags['EXIF DateTimeOriginal']), exif_date_format)}
-    return exif
+    timestamp = datetime.strptime(str(all_tags['EXIF DateTimeOriginal']), exif_date_format)
+    return all_tags, timestamp
 
 
-def store_in_database(timestamp, output, filename=None, exif_tags=None):
-    # store data in database
+def create_database():
     os.chdir(local_path)
-    if exif_tags is None:
-        exif_tags = {'exposure_time': '', 'iso': '', 'aperture': '', 'timestamp': ''}
     conn = sqlite3.connect('images.db')
     cur = conn.cursor()
-    cur.execute('CREATE TABLE IF NOT EXISTS '
-                'images (timestamp, filename, exposure_time, iso, aperture, exif_timestamp, output)')
-    cur.execute('INSERT INTO images (timestamp, filename, exposure_time, iso, aperture, exif_timestamp, output) '
-                'VALUES (?, ?, ?, ?, ?, ?, ?)', (timestamp, filename, exif_tags['exposure_time'], exif_tags['iso'],
-                                                 exif_tags['aperture'], exif_tags['timestamp'], output))
+    cur.execute('CREATE TABLE IF NOT EXISTS "images" ("raspi_time" TEXT, "camera_time" TEXT, "gphoto_output" TEXT);')
+    cur.execute('CREATE TABLE IF NOT EXISTS "files" ("images_rowid" INTEGER NOT NULL, "name" TEXT NOT NULL, '
+                '"local_copy" INTEGER NOT NULL DEFAULT (1), "remote_copy" INTEGER NOT NULL DEFAULT (0));')
+    cur.execute('CREATE TABLE IF NOT EXISTS "tags" ("images_rowid" INTEGER NOT NULL, '
+                '"name" TEXT NOT NULL, "value" TEXT);')
+    conn.commit()
+    conn.close()
+
+
+def store_in_database(timestamp, output, cam_time=None, file_names=[], exif_tags={}):
+    # store data in database
+    os.chdir(local_path)
+    conn = sqlite3.connect('images.db')
+    cur = conn.cursor()
+
+    cur.execute('INSERT INTO images (raspi_time, camera_time, gphoto_output) '
+                'VALUES (?, ?, ?)', (timestamp, cam_time, output))
+    cur.execute('SELECT last_insert_rowid()')
+    row_id = cur.fetchone()[0]
+    for name in file_names:
+        cur.execute('INSERT INTO files (images_rowid, name, local_copy, remote_copy) VALUES (?, ?, ?, ?',
+                    (row_id, name, 1, 0))
+    for key, value in exif_tags.items():
+        if key.startswith('EXIF') and len(str(value)) < 150:
+            cur.execute('INSERT INTO tags (image_rowid, name, value) VALUES (?, ?, ?)', (row_id, key, str(value)))
     conn.commit()
     conn.close()
 
@@ -102,8 +116,8 @@ def photo_loop():
         if files[0] != '':
             no_photo_taken = 0
             jpeg_path = os.path.join(local_path, files[0])
-            exif_tags = extract_exif(jpeg_path)
-            store_in_database(now, output, filename=files[0], exif_tags=exif_tags)
+            exif_tags, cam_time = extract_exif(jpeg_path)
+            store_in_database(now, output, cam_time=cam_time, file_names=files, exif_tags=exif_tags)
         else:
             no_photo_taken += 1
             store_in_database(now, output)
@@ -148,9 +162,6 @@ if __name__ == '__main__':
     camera = gpiozero.DigitalOutputDevice(pin=2, active_high=True)
     restart_camera()
 
-    # check if the clock is possibly set correctly (this script should run on a Raspberry Pi without RTC)
-    if datetime.now() > datetime(2018, 2, 1, 0, 0):
-        photo_loop()
-    else:
-        print('Systemdatum falsch')
+    create_database()
+    photo_loop()
 
