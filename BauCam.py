@@ -36,9 +36,6 @@ def take_photo(capture_path, local_path, pic_name):
         out_bytes = subprocess.run(['gphoto2', '--capture-image-and-download'], timeout=15,
                                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT).stdout
         output = str(out_bytes, 'utf-8')
-        # print('Ausgabe:')
-        # print('---')
-        # print(str(output))
         final_names = ['']
         files = os.listdir()
         for file_name in files:
@@ -76,11 +73,12 @@ def create_database():
                 '"local_copy" INTEGER NOT NULL DEFAULT (1), "remote_copy" INTEGER NOT NULL DEFAULT (0));')
     cur.execute('CREATE TABLE IF NOT EXISTS "tags" ("images_rowid" INTEGER NOT NULL, '
                 '"name" TEXT NOT NULL, "value" TEXT);')
+    cur.execute('CREATE TABLE IF NOT EXISTS "climate" ("raspi_time" TEXT, "humidity" REAL, "temperature" REAL);')
     conn.commit()
     conn.close()
 
 
-def store_in_database(timestamp, output, cam_time=None, file_names=[], exif_tags={}):
+def store_exif_in_database(timestamp, output, cam_time=None, file_names=[], exif_tags={}):
     # store data in database
     os.chdir(local_path)
     conn = sqlite3.connect('images.db')
@@ -100,6 +98,18 @@ def store_in_database(timestamp, output, cam_time=None, file_names=[], exif_tags
     conn.close()
 
 
+def store_climate_in_database(timestamp, humidity, temperature):
+    # store data in database
+    os.chdir(local_path)
+    conn = sqlite3.connect('images.db')
+    cur = conn.cursor()
+
+    cur.execute('INSERT INTO climate (raspi_time, humidity, temperature) '
+                'VALUES (?, ?, ?)', (timestamp, humidity, temperature))
+    conn.commit()
+    conn.close()
+
+
 def restart_camera():
     camera.off()
     sleep(5)
@@ -112,8 +122,13 @@ def main_loop():
     last_climate = datetime.now() - timedelta(seconds=climate_interval - 2)
     no_photo_taken = 0
 
-    while not watcher.kill_now:
+    while True:
         now = datetime.now()
+
+        # quit cleanly after receiving kill signal
+        if watcher.kill_now:
+            print('quitting...')
+            break
 
         if now >= last_photo + timedelta(seconds=photo_interval):
             last_photo = now
@@ -123,10 +138,10 @@ def main_loop():
                 no_photo_taken = 0
                 jpeg_path = os.path.join(local_path, files[0])
                 exif_tags, cam_time = extract_exif(jpeg_path)
-                store_in_database(now, output, cam_time=cam_time, file_names=files, exif_tags=exif_tags)
+                store_exif_in_database(now, output, cam_time=cam_time, file_names=files, exif_tags=exif_tags)
             else:
                 no_photo_taken += 1
-                store_in_database(now, output)
+                store_exif_in_database(now, output)
             if no_photo_taken > 3:
                 print('rebooting everything')
                 subprocess.run(['sudo', 'reboot'])  # works only on systems with sudo without password (RasPi)
@@ -140,8 +155,7 @@ def main_loop():
         if now >= last_climate + timedelta(seconds=climate_interval):
             last_climate = now
             humidity, temperature = Adafruit_DHT.read(sensor, sensor_pin)
-            print('Humidity', humidity)
-            print('Temperature', temperature)
+            store_climate_in_database(now, humidity, temperature)
 
         sleep(1)
 
