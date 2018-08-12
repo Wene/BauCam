@@ -65,8 +65,7 @@ def extract_exif(file_path):
 
 
 def create_database():
-    os.chdir(local_path)
-    conn = sqlite3.connect('images.db')
+    conn = sqlite3.connect(database_path)
     cur = conn.cursor()
     cur.execute('CREATE TABLE IF NOT EXISTS "images" ("raspi_time" TEXT, "camera_time" TEXT, "gphoto_output" TEXT);')
     cur.execute('CREATE TABLE IF NOT EXISTS "files" ("images_rowid" INTEGER NOT NULL, "name" TEXT NOT NULL, '
@@ -80,8 +79,7 @@ def create_database():
 
 def store_exif_in_database(timestamp, output, cam_time=None, file_names=[], exif_tags={}):
     # store data in database
-    os.chdir(local_path)
-    conn = sqlite3.connect('images.db')
+    conn = sqlite3.connect(database_path)
     cur = conn.cursor()
 
     cur.execute('INSERT INTO images (raspi_time, camera_time, gphoto_output) '
@@ -100,10 +98,8 @@ def store_exif_in_database(timestamp, output, cam_time=None, file_names=[], exif
 
 def store_climate_in_database(timestamp, humidity, temperature):
     # store data in database
-    os.chdir(local_path)
-    conn = sqlite3.connect('images.db')
+    conn = sqlite3.connect(database_path)
     cur = conn.cursor()
-
     cur.execute('INSERT INTO climate (raspi_time, humidity, temperature) '
                 'VALUES (?, ?, ?)', (timestamp, humidity, temperature))
     conn.commit()
@@ -180,6 +176,7 @@ if __name__ == '__main__':
         conf['general'] = {'capture path': '/tmp/BauCam',
                            'local path': '~/BauCam/images',
                            'remote path': '~/BauCam/remote',
+                           'database path': '~/BauCam/baucam.db',
                            'photo interval': '600',
                            'climate interval': '120'}
         with open('BauCam.conf', 'w') as f:
@@ -189,6 +186,7 @@ if __name__ == '__main__':
     capture_path = os.path.expanduser(general_conf.get('capture path'))
     local_path = os.path.expanduser(general_conf.get('local path'))
     remote_path = os.path.expanduser(general_conf.get('remote path'))
+    database_path = os.path.expanduser(general_conf.get('database path'))
     if not os.path.isdir(capture_path):
         os.makedirs(capture_path)
     if not os.path.isdir(local_path):
