@@ -118,8 +118,8 @@ def restart_camera():
 
 
 def main_loop():
-    last_photo = datetime.now()- timedelta(seconds=photo_interval - 2)
-    last_climate = datetime.now() - timedelta(seconds=climate_interval - 2)
+    last_photo = datetime.now()- photo_interval - timedelta(seconds=2)
+    last_climate = datetime.now() - climate_interval - timedelta(seconds=2)
     no_photo_taken = 0
 
     while True:
@@ -130,8 +130,13 @@ def main_loop():
             print('quitting...')
             break
 
-        if now >= last_photo + timedelta(seconds=photo_interval):
-            last_photo = now
+        if now >= last_photo + photo_interval:
+
+            # increase last photo time by interval or set it to now if there is more than one delay between then and now
+            last_photo += photo_interval
+            if last_photo < now:
+                    last_photo = now
+
             pic_name = now.strftime('img_%Y-%m-%d_%H-%M-%S')
             files, output = take_photo(capture_path, local_path, pic_name)
             if files[0] != '':
@@ -152,8 +157,13 @@ def main_loop():
             if no_photo_taken > 0:
                 print('system will be rebooted after', 4 - no_photo_taken, 'failures.')
 
-        if now >= last_climate + timedelta(seconds=climate_interval):
-            last_climate = now
+        if now >= last_climate + climate_interval:
+
+            # increase last photo time by interval or set it to now if there is more than one delay between then and now
+            last_climate += climate_interval
+            if last_climate < now:
+                    last_climate = now
+
             humidity, temperature = Adafruit_DHT.read(sensor, sensor_pin)
             store_climate_in_database(now, humidity, temperature)
 
@@ -185,8 +195,8 @@ if __name__ == '__main__':
         os.makedirs(local_path)
     if not os.path.isdir(remote_path):
         os.makedirs(remote_path)
-    photo_interval = general_conf.getint('photo interval')
-    climate_interval = general_conf.getint('climate interval')
+    photo_interval = timedelta(seconds=general_conf.getint('photo interval'))
+    climate_interval = timedelta(seconds=general_conf.getint('climate interval'))
 
     # catch signals for clean exit
     watcher = KillWatcher()
