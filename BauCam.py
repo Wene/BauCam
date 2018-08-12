@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import os
+import signal
 import subprocess
 import exifread
 import configparser
@@ -9,6 +10,18 @@ from time import sleep
 from datetime import datetime, timedelta
 import gpiozero
 import sys
+import Adafruit_DHT
+
+
+class KillWatcher:
+    kill_now = False
+
+    def __init__(self):
+        signal.signal(signal.SIGTERM, self.handler)
+        signal.signal(signal.SIGINT, self.handler)
+
+    def handler(self, signum, frame):
+        self.kill_now = True
 
 
 def take_photo(capture_path, local_path, pic_name):
@@ -78,11 +91,11 @@ def store_in_database(timestamp, output, cam_time=None, file_names=[], exif_tags
     cur.execute('SELECT last_insert_rowid()')
     row_id = cur.fetchone()[0]
     for name in file_names:
-        cur.execute('INSERT INTO files (images_rowid, name, local_copy, remote_copy) VALUES (?, ?, ?, ?',
+        cur.execute('INSERT INTO files (images_rowid, name, local_copy, remote_copy) VALUES (?, ?, ?, ?)',
                     (row_id, name, 1, 0))
     for key, value in exif_tags.items():
         if key.startswith('EXIF') and len(str(value)) < 150:
-            cur.execute('INSERT INTO tags (image_rowid, name, value) VALUES (?, ?, ?)', (row_id, key, str(value)))
+            cur.execute('INSERT INTO tags (images_rowid, name, value) VALUES (?, ?, ?)', (row_id, key, str(value)))
     conn.commit()
     conn.close()
 
@@ -94,42 +107,43 @@ def restart_camera():
     sleep(5)
 
 
-def photo_loop():
-    now = datetime.now()
-    last_time = now - timedelta(seconds=interval - 2)
+def main_loop():
+    last_photo = datetime.now()- timedelta(seconds=photo_interval - 2)
+    last_climate = datetime.now() - timedelta(seconds=climate_interval - 2)
     no_photo_taken = 0
 
-    # TODO: insert infinite loop here
-    for i in range(20):
+    while not watcher.kill_now:
+        now = datetime.now()
 
-        # calculate cycle time
-        while now < last_time + timedelta(seconds=interval):
-            now = datetime.now()
-            diff = now - last_time
-            print(diff.total_seconds())
-            sleep(1)
-        last_time = now
+        if now >= last_photo + timedelta(seconds=photo_interval):
+            last_photo = now
+            pic_name = now.strftime('img_%Y-%m-%d_%H-%M-%S')
+            files, output = take_photo(capture_path, local_path, pic_name)
+            if files[0] != '':
+                no_photo_taken = 0
+                jpeg_path = os.path.join(local_path, files[0])
+                exif_tags, cam_time = extract_exif(jpeg_path)
+                store_in_database(now, output, cam_time=cam_time, file_names=files, exif_tags=exif_tags)
+            else:
+                no_photo_taken += 1
+                store_in_database(now, output)
+            if no_photo_taken > 3:
+                print('rebooting everything')
+                subprocess.run(['sudo', 'reboot'])  # works only on systems with sudo without password (RasPi)
+                sys.exit('reboot triggered')
+            if no_photo_taken > 2:
+                print('rebooting camera')
+                restart_camera()
+            if no_photo_taken > 0:
+                print('system will be rebooted after', 4 - no_photo_taken, 'failures.')
 
-        # take a photo
-        pic_name = now.strftime('img_%Y-%m-%d_%H-%M-%S')
-        files, output = take_photo(capture_path, local_path, pic_name)
-        if files[0] != '':
-            no_photo_taken = 0
-            jpeg_path = os.path.join(local_path, files[0])
-            exif_tags, cam_time = extract_exif(jpeg_path)
-            store_in_database(now, output, cam_time=cam_time, file_names=files, exif_tags=exif_tags)
-        else:
-            no_photo_taken += 1
-            store_in_database(now, output)
-        if no_photo_taken > 3:
-            print('rebooting everything')
-            subprocess.run(['sudo', 'reboot'])  # works only on systems with sudo without password (RasPi)
-            sys.exit('reboot triggered')
-        if no_photo_taken > 2:
-            print('rebooting camera')
-            restart_camera()
-        if no_photo_taken > 0:
-            print('system will be rebooted after', 4 - no_photo_taken, 'failures.')
+        if now >= last_climate + timedelta(seconds=climate_interval):
+            last_climate = now
+            humidity, temperature = Adafruit_DHT.read(sensor, sensor_pin)
+            print('Humidity', humidity)
+            print('Temperature', temperature)
+
+        sleep(1)
 
 
 if __name__ == '__main__':
@@ -142,7 +156,8 @@ if __name__ == '__main__':
         conf['general'] = {'capture path': '/tmp/BauCam',
                            'local path': '~/BauCam/images',
                            'remote path': '~/BauCam/remote',
-                           'interval seconds': '30'}
+                           'photo interval': '600',
+                           'climate interval': '120'}
         with open('BauCam.conf', 'w') as f:
             conf.write(f)
     general_conf = conf['general']
@@ -156,12 +171,20 @@ if __name__ == '__main__':
         os.makedirs(local_path)
     if not os.path.isdir(remote_path):
         os.makedirs(remote_path)
-    interval = general_conf.getint('interval seconds')
+    photo_interval = general_conf.getint('photo interval')
+    climate_interval = general_conf.getint('climate interval')
+
+    # catch signals for clean exit
+    watcher = KillWatcher()
 
     # connect relays module and restart camera
     camera = gpiozero.DigitalOutputDevice(pin=2, active_high=True)
     restart_camera()
 
+    # connect temperature sensor
+    sensor = Adafruit_DHT.DHT11
+    sensor_pin = 4
+
     create_database()
-    photo_loop()
+    main_loop()
 
