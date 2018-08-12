@@ -134,7 +134,7 @@ def main_loop():
 
             # increase last photo time by interval or set it to now if there is more than one delay between then and now
             last_photo += photo_interval
-            if last_photo < now + photo_interval:
+            if last_photo < now - photo_interval:
                     last_photo = now
 
             pic_name = now.strftime('img_%Y-%m-%d_%H-%M-%S')
@@ -161,7 +161,7 @@ def main_loop():
 
             # increase last photo time by interval or set it to now if there is more than one delay between then and now
             last_climate += climate_interval
-            if last_climate < now + climate_interval:
+            if last_climate < now - climate_interval:
                     last_climate = now
 
             humidity, temperature = Adafruit_DHT.read(sensor, sensor_pin)
