@@ -13,15 +13,22 @@ import sys
 import Adafruit_DHT
 
 
+# TODO: copy data to remote location
+
 class KillWatcher:
     kill_now = False
+    shoot = False
 
     def __init__(self):
-        signal.signal(signal.SIGTERM, self.handler)
-        signal.signal(signal.SIGINT, self.handler)
+        signal.signal(signal.SIGTERM, self.handler_kill)
+        signal.signal(signal.SIGINT, self.handler_kill)
+        signal.signal(signal.SIGUSR1, self.handler_usr1)
 
-    def handler(self, signum, frame):
+    def handler_kill(self, signum, frame):
         self.kill_now = True
+
+    def handler_usr1(self, signum, frame):
+        self.shoot = True
 
 
 def take_photo(capture_path, local_path, pic_name):
@@ -126,7 +133,8 @@ def main_loop():
             print('quitting...')
             break
 
-        if now >= last_photo + photo_interval:
+        if now >= last_photo + photo_interval or watcher.shoot:
+            watcher.shoot = False   # reset anyway
 
             # increase last photo time by interval or set it to now if there is more than one delay between then and now
             last_photo += photo_interval
