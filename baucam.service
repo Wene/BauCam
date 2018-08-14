@@ -1,0 +1,10 @@
+[Unit]
+Description=Automated camera tethering and storage management
+
+[Service]
+ExecStart=/absolute/path/to/BauCam.py
+WorkingDirectory=/absolute/path/to
+User=pi
+
+[Install]
+WantedBy=multi-user.target
