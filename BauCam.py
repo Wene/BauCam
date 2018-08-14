@@ -14,6 +14,8 @@ import Adafruit_DHT
 
 
 # TODO: copy data to remote location
+# TODO: repeat failed photo faster
+# TODO: implement different night and day mode
 
 class KillWatcher:
     kill_now = False
