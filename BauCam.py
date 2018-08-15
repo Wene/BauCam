@@ -143,7 +143,7 @@ def main_loop():
             if last_photo < now - photo_interval:
                     last_photo = now
 
-            pic_name = now.strftime('img_%Y-%m-%d_%H-%M-%S')
+            pic_name = image_prefix + now.strftime('%Y-%m-%d_%H-%M-%S')
             files, output = take_photo(capture_path, local_path, pic_name)
             if files[0] != '':
                 no_photo_taken = 0
@@ -188,7 +188,8 @@ if __name__ == '__main__':
                            'remote path': '~/BauCam/remote',
                            'database path': '~/BauCam/baucam.db',
                            'photo interval': '600',
-                           'climate interval': '120'}
+                           'climate interval': '120',
+                           'image prefix': 'img_'}
         with open('BauCam.conf', 'w') as f:
             conf.write(f)
     general_conf = conf['general']
@@ -205,6 +206,7 @@ if __name__ == '__main__':
         os.makedirs(remote_path)
     photo_interval = timedelta(seconds=general_conf.getint('photo interval'))
     climate_interval = timedelta(seconds=general_conf.getint('climate interval'))
+    image_prefix = general_conf.get('image prefix')
 
     # catch signals for clean exit
     watcher = KillWatcher()
