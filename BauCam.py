@@ -14,7 +14,6 @@ import Adafruit_DHT
 
 
 # TODO: copy data to remote location
-# TODO: repeat failed photo faster
 # TODO: implement different night and day mode
 
 class KillWatcher:
@@ -161,6 +160,7 @@ def main_loop():
                 no_photo_taken = 0
             else:
                 no_photo_taken += 1
+                last_photo = last_photo - photo_interval + timedelta(seconds=no_photo_taken * 30)
             if no_photo_taken > 3:
                 print('rebooting everything')
                 subprocess.run(['sudo', 'reboot'])  # works only on systems with sudo without password (RasPi)
