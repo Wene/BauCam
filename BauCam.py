@@ -33,8 +33,9 @@ class KillWatcher:
         self.shoot = True
 
 
-def take_photo(capture_path, local_path, pic_name):
+def take_photo(capture_path, local_path, now):
     os.chdir(capture_path)
+    pic_name = image_prefix + now.strftime('%Y-%m-%d_%H-%M-%S')
 
     # clean up the directory
     files = os.listdir()
@@ -55,7 +56,16 @@ def take_photo(capture_path, local_path, pic_name):
                 final_names[0] = new_name
             else:
                 final_names.append(new_name)
-        return final_names, output
+
+            if final_names[0] != '':
+                jpeg_path = os.path.join(local_path, final_names[0])
+                exif_tags, cam_time = extract_exif(jpeg_path)
+                store_exif_in_database(now, output, cam_time=cam_time, file_names=final_names, exif_tags=exif_tags)
+                return True
+            else:
+                store_exif_in_database(now, output)
+                return False
+
     except subprocess.TimeoutExpired as e:
         print('Timeout beim Versuch zu fotografieren...')
     except Exception as e:
@@ -105,7 +115,10 @@ def store_exif_in_database(timestamp, output, cam_time=None, file_names=[], exif
     conn.close()
 
 
-def store_climate_in_database(timestamp, humidity, temperature):
+def measure_and_store_climate(timestamp):
+    # measure the climate data
+    humidity, temperature = Adafruit_DHT.read(sensor, sensor_pin)
+
     # store data in database
     conn = sqlite3.connect(database_path)
     cur = conn.cursor()
@@ -143,16 +156,11 @@ def main_loop():
             if last_photo < now - photo_interval:
                     last_photo = now
 
-            pic_name = image_prefix + now.strftime('%Y-%m-%d_%H-%M-%S')
-            files, output = take_photo(capture_path, local_path, pic_name)
-            if files[0] != '':
+            success = take_photo(capture_path, local_path, now)
+            if success:
                 no_photo_taken = 0
-                jpeg_path = os.path.join(local_path, files[0])
-                exif_tags, cam_time = extract_exif(jpeg_path)
-                store_exif_in_database(now, output, cam_time=cam_time, file_names=files, exif_tags=exif_tags)
             else:
                 no_photo_taken += 1
-                store_exif_in_database(now, output)
             if no_photo_taken > 3:
                 print('rebooting everything')
                 subprocess.run(['sudo', 'reboot'])  # works only on systems with sudo without password (RasPi)
@@ -165,13 +173,12 @@ def main_loop():
 
         if now >= last_climate + climate_interval:
 
-            # increase last photo time by interval or set it to now if there is more than one delay between then and now
+            # increase last climate time by interval or set it to now if there is more than one delay between then and now
             last_climate += climate_interval
             if last_climate < now - climate_interval:
                     last_climate = now
 
-            humidity, temperature = Adafruit_DHT.read(sensor, sensor_pin)
-            store_climate_in_database(now, humidity, temperature)
+            measure_and_store_climate(now)
 
         sleep(1)
 
