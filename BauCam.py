@@ -45,7 +45,7 @@ def take_photo(capture_path, local_path, now):
         out_bytes = subprocess.run(['gphoto2', '--capture-image-and-download'], timeout=15,
                                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT).stdout
         output = str(out_bytes, 'utf-8')
-        final_names = ['']
+        final_names = [None]
         files = os.listdir()
         for file_name in files:
             base, ext = os.path.splitext(file_name)
@@ -56,14 +56,14 @@ def take_photo(capture_path, local_path, now):
             else:
                 final_names.append(new_name)
 
-            if final_names[0] != '':
-                jpeg_path = os.path.join(local_path, final_names[0])
-                exif_tags, cam_time = extract_exif(jpeg_path)
-                store_exif_in_database(now, output, cam_time=cam_time, file_names=final_names, exif_tags=exif_tags)
-                return True
-            else:
-                store_exif_in_database(now, output)
-                return False
+        if final_names[0] is not None:
+            jpeg_path = os.path.join(local_path, final_names[0])
+            exif_tags, cam_time = extract_exif(jpeg_path)
+            store_exif_in_database(now, output, cam_time=cam_time, file_names=final_names, exif_tags=exif_tags)
+            return True
+        else:
+            store_exif_in_database(now, output)
+            return False
 
     except subprocess.TimeoutExpired as e:
         print('Timeout beim Versuch zu fotografieren...')
