@@ -65,11 +65,11 @@ def take_photo(capture_path, local_path, now):
             return False
 
     except subprocess.TimeoutExpired as e:
-        print('Timeout beim Versuch zu fotografieren...')
+        print('Timeout beim Versuch zu fotografieren...', flush=True)
     except Exception as e:
-        print('Unbekannter Ausnahmefehler:')
-        print(type(e))
-        print(e)
+        print('Unbekannter Ausnahmefehler:', flush=True)
+        print(type(e), flush=True)
+        print(e, flush=True)
 
 
 def extract_exif(file_path):
@@ -144,13 +144,14 @@ def main_loop():
 
         # quit cleanly after receiving kill signal
         if watcher.kill_now:
-            print('quitting...')
+            print('quitting...', flush=True)
             break
 
         # check if now is the time to take a photo
         photo_now = False
         if watcher.shoot:
             photo_now = True
+            print('taking photo on SIGUSR1 trigger', flush=True)
             watcher.shoot = False
 
         if now >= last_photo + photo_interval:
@@ -162,10 +163,14 @@ def main_loop():
             if day_start < now.time() < day_end:
                 night_count = 0 # it's day: reset night counter
                 photo_now = True
+                print('taking photo at day', flush=True)
             else:   # it's night: skip interval if not multiple of night_factor
                 night_count += 1
                 if 0 == night_count % night_factor:
                     photo_now = True
+                    print('taking night photo at {}. interval'.format(night_count), flush=True)
+                else:
+                    print('no photo on {}. interval at night'.format(night_count), flush=True)
 
         # take photo it's time to take a photo
         if photo_now:
@@ -180,10 +185,11 @@ def main_loop():
                 subprocess.run(['sudo', 'reboot'])  # works only on systems with sudo without password (RasPi)
                 sys.exit('reboot triggered')
             if no_photo_taken > 2:
-                print('rebooting camera')
+                print('rebooting camera', flush=True)
                 restart_camera()
             if no_photo_taken > 0:
-                print('system will be rebooted after', 4 - no_photo_taken, 'failures.')
+                print('failure while photo taking. The system will be rebooted '
+                      'after {} further failures.'.format(4 - no_photo_taken), flush=True)
 
         if now >= last_climate + climate_interval:
 
