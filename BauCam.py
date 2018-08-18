@@ -7,14 +7,13 @@ import exifread
 import configparser
 import sqlite3
 from time import sleep
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 import gpiozero
 import sys
 import Adafruit_DHT
 
 
 # TODO: copy data to remote location
-# TODO: implement different night and day mode
 
 class KillWatcher:
     kill_now = False
@@ -135,10 +134,11 @@ def restart_camera():
 
 
 def main_loop():
-    last_photo = datetime.now()- photo_interval - timedelta(seconds=2)
+    last_photo = datetime.now() - photo_interval - timedelta(seconds=2)
     last_climate = datetime.now() - climate_interval - timedelta(seconds=2)
     no_photo_taken = 0
 
+    night_count = 0
     while True:
         now = datetime.now()
 
@@ -147,14 +147,28 @@ def main_loop():
             print('quitting...')
             break
 
-        if now >= last_photo + photo_interval or watcher.shoot:
-            watcher.shoot = False   # reset anyway
+        # check if now is the time to take a photo
+        photo_now = False
+        if watcher.shoot:
+            photo_now = True
+            watcher.shoot = False
 
+        if now >= last_photo + photo_interval:
             # increase last photo time by interval or set it to now if there is more than one delay between then and now
             last_photo += photo_interval
             if last_photo < now - photo_interval:
-                    last_photo = now
+                last_photo = now
 
+            if day_start < now.time() < day_end:
+                night_count = 0 # it's day: reset night counter
+                photo_now = True
+            else:   # it's night: skip interval if not multiple of night_factor
+                night_count += 1
+                if 0 == night_count % night_factor:
+                    photo_now = True
+
+        # take photo it's time to take a photo
+        if photo_now:
             success = take_photo(capture_path, local_path, now)
             if success:
                 no_photo_taken = 0
@@ -195,8 +209,11 @@ if __name__ == '__main__':
                            'remote path': '~/BauCam/remote',
                            'database path': '~/BauCam/baucam.db',
                            'photo interval': '600',
+                           'night factor': '6',
                            'climate interval': '120',
-                           'image prefix': 'img_'}
+                           'image prefix': 'img_',
+                           'day start': '6:00',
+                           'day end': '21:00'}
         with open('BauCam.conf', 'w') as f:
             conf.write(f)
     general_conf = conf['general']
@@ -213,7 +230,10 @@ if __name__ == '__main__':
         os.makedirs(remote_path)
     photo_interval = timedelta(seconds=general_conf.getint('photo interval'))
     climate_interval = timedelta(seconds=general_conf.getint('climate interval'))
+    night_factor = general_conf.getint('night factor')
     image_prefix = general_conf.get('image prefix')
+    day_start = datetime.strptime(general_conf.get('day start'), '%H:%M').time()
+    day_end = datetime.strptime(general_conf.get('day end'), '%H:%M').time()
 
     # catch signals for clean exit
     watcher = KillWatcher()
