@@ -41,7 +41,7 @@ def take_photo(capture_path, local_path, now):
         os.remove(file_name)
 
     try:
-        out_bytes = subprocess.run(['gphoto2', '--capture-image-and-download'], timeout=15,
+        out_bytes = subprocess.run(['gphoto2', '--capture-image-and-download'], timeout=20,
                                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT).stdout
         output = str(out_bytes, 'utf-8')
         final_names = [None]
@@ -65,9 +65,9 @@ def take_photo(capture_path, local_path, now):
             return False
 
     except subprocess.TimeoutExpired as e:
-        print('Timeout beim Versuch zu fotografieren...', flush=True)
+        print('Timeout while taking a photo...', flush=True)
     except Exception as e:
-        print('Unbekannter Ausnahmefehler:', flush=True)
+        print('Unknown exception:', flush=True)
         print(type(e), flush=True)
         print(e, flush=True)
 
@@ -136,7 +136,7 @@ def restart_camera():
 def main_loop():
     last_photo = datetime.now() - photo_interval - timedelta(seconds=2)
     last_climate = datetime.now() - climate_interval - timedelta(seconds=2)
-    no_photo_taken = 0
+    camera_error = 0
 
     night_count = 0
     while True:
@@ -172,24 +172,27 @@ def main_loop():
                 else:
                     print('no photo on {}. interval at night'.format(night_count), flush=True)
 
-        # take photo it's time to take a photo
+        if camera_error and now >= last_photo + timedelta(seconds=camera_error * 30):
+            print('taking a rescue photo after {} failures'.format(camera_error), flush=True)
+            photo_now = True
+
+        # take photo if it's time to take a photo
         if photo_now:
             success = take_photo(capture_path, local_path, now)
             if success:
-                no_photo_taken = 0
+                camera_error = 0
             else:
-                no_photo_taken += 1
-                last_photo = last_photo - photo_interval + timedelta(seconds=no_photo_taken * 30)
-            if no_photo_taken > 3:
+                camera_error += 1
+            if camera_error > 3:
                 print('rebooting everything')
                 subprocess.run(['sudo', 'reboot'])  # works only on systems with sudo without password (RasPi)
                 sys.exit('reboot triggered')
-            if no_photo_taken > 2:
+            if camera_error > 2:
                 print('rebooting camera', flush=True)
                 restart_camera()
-            if no_photo_taken > 0:
+            if camera_error > 0:
                 print('failure while photo taking. The system will be rebooted '
-                      'after {} further failures.'.format(4 - no_photo_taken), flush=True)
+                      'after {} further failures.'.format(4 - camera_error), flush=True)
 
         if now >= last_climate + climate_interval:
 
