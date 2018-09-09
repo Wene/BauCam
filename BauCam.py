@@ -113,6 +113,24 @@ def store_exif_in_database(timestamp, output, cam_time=None, file_names=[], exif
     conn.close()
 
 
+def remote_archive():
+    conn = sqlite3.connect(database_path)
+    cur = conn.cursor()
+    cur.execute('SELECT "rowid", "name" FROM "files" '
+                'WHERE "remote_copy" = 0 AND "local_copy" = 1;')
+    rows = cur.fetchall()
+    copies = []
+    for rowid, name in rows:
+        # TODO: do the actual copying
+        if int(rowid) % 2:
+            copies.append((rowid, ))
+    # for executemany() the iterable must contain tuples even if there is only one element in it.
+    cur.executemany('UPDATE "files" SET "remote_copy" = 1 WHERE "rowid" = ?;', copies)
+
+    conn.commit()
+    conn.close()
+
+
 def measure_and_store_climate(timestamp):
     # measure the climate data
     humidity, temperature = Adafruit_DHT.read(sensor, sensor_pin)
@@ -257,4 +275,4 @@ if __name__ == '__main__':
 
     create_database()
     main_loop()
-
+    #remote_archive()
