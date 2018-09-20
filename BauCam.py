@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import os
+import shutil
 import signal
 import subprocess
 import exifread
@@ -114,19 +115,45 @@ def store_exif_in_database(timestamp, output, cam_time=None, file_names=[], exif
 
 
 def remote_archive():
+    # establish connection to DB
     conn = sqlite3.connect(database_path)
     cur = conn.cursor()
+
+    # get all names of only local files
     cur.execute('SELECT "rowid", "name" FROM "files" '
                 'WHERE "remote_copy" = 0 AND "local_copy" = 1;')
     rows = cur.fetchall()
-    copies = []
-    for rowid, name in rows:
-        # TODO: do the actual copying
-        if int(rowid) % 2:
-            copies.append((rowid, ))
-    # for executemany() the iterable must contain tuples even if there is only one element in it.
-    cur.executemany('UPDATE "files" SET "remote_copy" = 1 WHERE "rowid" = ?;', copies)
 
+    start_time = datetime.now() # remember current time
+
+    # work through all files in the list
+    for rowid, name in rows:
+
+        # copying many files could take a long time - break here if this took longer than a photo_interval
+        if start_time + photo_interval <= datetime.now():
+            print('Timeout while copying files', flush=True)
+            break
+
+        # copy the current file and update DB including error handling
+        try:
+            shutil.copy2(os.path.join(local_path, name), remote_path)
+            cur.execute('UPDATE "files" SET "remote_copy" = 1 WHERE "rowid" = ?;', [rowid])
+        except FileNotFoundError as e:
+            print('Source file not found. Setting local_copy to 0.', e, flush=True)
+            cur.execute('UPDATE "files" SET "local_copy" = 0 WHERE "rowid" = ?;', [rowid])
+        except PermissionError as e:
+            print('Permission denied:', e, flush=True)
+            break
+        except OSError as e:
+            print('OS Error:', e, flush=True)
+            break
+        except Exception as e:
+            print('Unknown exception:', flush=True)
+            print(type(e), flush=True)
+            print(e, flush=True)
+            break
+
+    # close DB connection
     conn.commit()
     conn.close()
 
@@ -273,6 +300,6 @@ if __name__ == '__main__':
     sensor = Adafruit_DHT.DHT11
     sensor_pin = 4
 
-    create_database()
-    main_loop()
-    #remote_archive()
+    # create_database()
+    # main_loop()
+    remote_archive()
