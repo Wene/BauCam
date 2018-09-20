@@ -14,8 +14,6 @@ import sys
 import Adafruit_DHT
 
 
-# TODO: copy data to remote location
-
 class KillWatcher:
     kill_now = False
     shoot = False
@@ -119,19 +117,21 @@ def remote_archive():
     conn = sqlite3.connect(database_path)
     cur = conn.cursor()
 
+    start_time = datetime.now() # remember current time
+    no_timeout = True
+
     # get all names of only local files
     cur.execute('SELECT "rowid", "name" FROM "files" '
                 'WHERE "remote_copy" = 0 AND "local_copy" = 1;')
     rows = cur.fetchall()
 
-    start_time = datetime.now() # remember current time
-
-    # work through all files in the list
+    # work through all files in the list and copy them to remote_path
     for rowid, name in rows:
 
         # copying many files could take a long time - break here if this took longer than a photo_interval
         if start_time + photo_interval <= datetime.now():
             print('Timeout while copying files', flush=True)
+            no_timeout = False
             break
 
         # copy the current file and update DB including error handling
@@ -148,10 +148,45 @@ def remote_archive():
             print('OS Error:', e, flush=True)
             break
         except Exception as e:
-            print('Unknown exception:', flush=True)
+            print('Unhandled exception:', flush=True)
             print(type(e), flush=True)
             print(e, flush=True)
             break
+
+    # get all names of files in both locations
+    cur.execute('SELECT "rowid", "name" FROM "files" '
+                'WHERE "remote_copy" = 1 AND "local_copy" = 1;')
+    rows = cur.fetchall()
+
+    if no_timeout: # only continue if no timeout occurred before
+        for rowid, name in rows:
+
+            # break here if this took longer than a photo_interval
+            if start_time + photo_interval <= datetime.now():
+                print('Timeout while deleting files', flush=True)
+                no_timeout = False
+                break
+
+            # get free space on local_path
+            stat = os.statvfs(local_path)
+            space = stat.f_bavail * stat.f_frsize
+
+            # break as soon as there is enough free space
+            if space > min_free_space:
+                break
+
+            # delete current file including error handling
+            try:
+                os.remove(os.path.join(local_path, name))
+                cur.execute('UPDATE "files" SET "local_copy" = 0 WHERE "rowid" = ?;', [rowid])
+            except FileNotFoundError as e:
+                print('File not found while deleting. Setting local_copy to 0.', e, flush=True)
+                cur.execute('UPDATE "files" SET "local_copy" = 0 WHERE "rowid" = ?;', [rowid])
+            except Exception as e:
+                print('Unhandled exception:', flush=True)
+                print(type(e), flush=True)
+                print(e, flush=True)
+                break
 
     # close DB connection
     conn.commit()
@@ -226,6 +261,8 @@ def main_loop():
             success = take_photo(capture_path, local_path, now)
             if success:
                 camera_error = 0
+                # use the time after a successful photo to archive files
+                remote_archive()
             else:
                 camera_error += 1
             if camera_error > 3:
@@ -289,6 +326,9 @@ if __name__ == '__main__':
     day_start = datetime.strptime(general_conf.get('day start'), '%H:%M').time()
     day_end = datetime.strptime(general_conf.get('day end'), '%H:%M').time()
 
+    # TODO: update config automatically on code changes
+    min_free_space = 1024 * 1024 * 1024 # 1GiB
+
     # catch signals for clean exit
     watcher = KillWatcher()
 
@@ -300,6 +340,5 @@ if __name__ == '__main__':
     sensor = Adafruit_DHT.DHT11
     sensor_pin = 4
 
-    # create_database()
-    # main_loop()
-    remote_archive()
+    create_database()
+    main_loop()
