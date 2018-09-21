@@ -293,21 +293,50 @@ if __name__ == '__main__':
     conf = configparser.ConfigParser()
     if os.path.isfile('BauCam.conf'):
         conf.read('BauCam.conf')
-    # create new default config file if it doesn't exist
+    # create new default config if it doesn't exist
+    changed = False
     if 'general' not in conf.sections():
-        conf['general'] = {'capture path': '/tmp/BauCam',
-                           'local path': '~/BauCam/images',
-                           'remote path': '~/BauCam/remote',
-                           'database path': '~/BauCam/baucam.db',
-                           'photo interval': '600',
-                           'night factor': '6',
-                           'climate interval': '120',
-                           'image prefix': 'img_',
-                           'day start': '6:00',
-                           'day end': '21:00'}
+        conf['general'] = {}
+        changed = True
+    general_conf = conf['general']
+    if general_conf.get('capture path') is None:
+        general_conf['capture path'] = '/tmp/BauCam'
+        changed = True
+    if general_conf.get('local path') is None:
+        general_conf['local path'] = '~/BauCam/images'
+        changed = True
+    if general_conf.get('remote path') is None:
+        general_conf['remote path'] = '~/BauCam/remote'
+        changed = True
+    if general_conf.get('database path') is None:
+        general_conf['database path'] = '~/BauCam/baucam.db'
+        changed = True
+    if general_conf.get('photo interval') is None:
+        general_conf['photo interval'] = '600'
+        changed = True
+    if general_conf.get('night factor') is None:
+        general_conf['night factor'] = '6'
+        changed = True
+    if general_conf.get('climate interval') is None:
+        general_conf['climate interval'] = '120'
+        changed = True
+    if general_conf.get('image prefix') is None:
+        general_conf['image prefix'] = 'img_'
+        changed = True
+    if general_conf.get('day start') is None:
+        general_conf['day start'] = '6:00'
+        changed = True
+    if general_conf.get('day end') is None:
+        general_conf['day end'] = '21:00'
+        changed = True
+    if general_conf.get('free space') is None:
+        general_conf['free space'] = str(1024 * 1024 * 1024)
+        changed = True
+
+    if changed:
         with open('BauCam.conf', 'w') as f:
             conf.write(f)
-    general_conf = conf['general']
+
     # read all paths and create them if they don't exist
     capture_path = os.path.expanduser(general_conf.get('capture path'))
     local_path = os.path.expanduser(general_conf.get('local path'))
@@ -325,9 +354,7 @@ if __name__ == '__main__':
     image_prefix = general_conf.get('image prefix')
     day_start = datetime.strptime(general_conf.get('day start'), '%H:%M').time()
     day_end = datetime.strptime(general_conf.get('day end'), '%H:%M').time()
-
-    # TODO: update config automatically on code changes
-    min_free_space = 1024 * 1024 * 1024 # 1GiB
+    min_free_space = general_conf.getint('free space')
 
     # catch signals for clean exit
     watcher = KillWatcher()
