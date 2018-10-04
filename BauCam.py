@@ -243,7 +243,7 @@ def main_loop():
     last_climate = datetime.now() - climate_interval - timedelta(seconds=2)
     camera_error = 0
 
-    night_count = 0
+    interval_count = 1
     while True:
         now = datetime.now()
 
@@ -265,17 +265,22 @@ def main_loop():
             if last_photo < now - photo_interval:
                 last_photo = now
 
-            if day_start < now.time() < day_end:
-                night_count = 0 # it's day: reset night counter
+            factor = 1
+            weekday = day = True
+            if not day_start < now.time() < day_end:
+                factor *= night_factor
+                day = False
+            if now.weekday() in weekend_days:
+                factor *= weekend_factor
+                weekday = False
+            if weekday and day:
+                interval_count = 1  # it's day during the week: reset counter
+            if 0 == interval_count % factor:
                 photo_now = True
-                print('taking photo at day', flush=True)
-            else:   # it's night: skip interval if not multiple of night_factor
-                night_count += 1
-                if 0 == night_count % night_factor:
-                    photo_now = True
-                    print('taking night photo at {}. interval'.format(night_count), flush=True)
-                else:
-                    print('no photo on {}. interval at night'.format(night_count), flush=True)
+                print('taking photo at {}. interval'.format(interval_count), flush=True)
+            else:
+                print('no photo at {}. interval of {}'.format(interval_count, factor), flush=True)
+            interval_count += 1
 
         if camera_error and now >= last_photo + timedelta(seconds=camera_error * 30):
             print('taking a rescue photo after {} failures'.format(camera_error), flush=True)
@@ -357,6 +362,12 @@ if __name__ == '__main__':
     if general_conf.get('free space') is None:
         general_conf['free space'] = str(1024 * 1024 * 1024)
         changed = True
+    if general_conf.get('weekend days') is None:
+        general_conf['weekend days'] = '5 6'
+        changed = True
+    if general_conf.get('weekend factor') is None:
+        general_conf['weekend factor'] = '12'
+        changed = True
 
     if changed:
         with open('BauCam.conf', 'w') as f:
@@ -373,6 +384,8 @@ if __name__ == '__main__':
         os.makedirs(local_path)
     if not os.path.isdir(remote_path):
         os.makedirs(remote_path)
+
+    # read other configuration data
     photo_interval = timedelta(seconds=general_conf.getint('photo interval'))
     climate_interval = timedelta(seconds=general_conf.getint('climate interval'))
     night_factor = general_conf.getint('night factor')
@@ -380,6 +393,8 @@ if __name__ == '__main__':
     day_start = datetime.strptime(general_conf.get('day start'), '%H:%M').time()
     day_end = datetime.strptime(general_conf.get('day end'), '%H:%M').time()
     min_free_space = general_conf.getint('free space')
+    weekend_days = [int(x) for x in general_conf.get('weekend days').split()]
+    weekend_factor = general_conf.getint('weekend factor')
 
     # catch signals for clean exit
     watcher = KillWatcher()
