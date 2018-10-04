@@ -163,7 +163,7 @@ def remote_archive():
                 'WHERE "remote_copy" = 1 AND "local_copy" = 1;')
     rows = cur.fetchall()
 
-    if no_timeout: # only continue if no timeout occurred before
+    if no_timeout:  # only continue if no timeout occurred before
         for rowid, name in rows:
 
             # break here if this took longer than a photo_interval
@@ -196,6 +196,24 @@ def remote_archive():
     # close DB connection
     conn.commit()
     conn.close()
+
+    # create a backup of the db if enough time left
+    # ToDo: remove old backups from time to time
+    if no_timeout and os.path.exists(os.path.join(remote_path, 'canary.txt')):
+        try:
+            date_str = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+            backup_path = os.path.join(remote_path, image_prefix + 'dbBackup_' + date_str + '.db')
+            shutil.copy2(database_path, backup_path)
+        except FileNotFoundError as e:
+            print('Source DB file not found.', e, flush=True)
+        except PermissionError as e:
+            print('Permission denied:', e, flush=True)
+        except OSError as e:
+            print('OS Error:', e, flush=True)
+        except Exception as e:
+            print('Unhandled exception:', flush=True)
+            print(type(e), flush=True)
+            print(e, flush=True)
 
 
 def measure_and_store_climate(timestamp):
