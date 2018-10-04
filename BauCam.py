@@ -65,10 +65,12 @@ def take_photo(capture_path, local_path, now):
 
     except subprocess.TimeoutExpired as e:
         print('Timeout while taking a photo...', flush=True)
+        return False
     except Exception as e:
         print('Unknown exception:', flush=True)
         print(type(e), flush=True)
         print(e, flush=True)
+        return False
 
 
 def extract_exif(file_path):
@@ -286,8 +288,8 @@ def main_loop():
                 camera_error = 0
                 # use the time after a successful photo to archive files
                 remote_archive()
-            else:
-                camera_error += 1
+            elif day_start < now.time() < day_end:
+                camera_error += 1   # count errors only at day - avoid reboots over night
             if camera_error > 3:
                 print('rebooting everything')
                 subprocess.run(['sudo', 'reboot'])  # works only on systems with sudo without password (RasPi)
