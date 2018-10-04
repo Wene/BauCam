@@ -113,11 +113,6 @@ def store_exif_in_database(timestamp, output, cam_time=None, file_names=[], exif
 
 
 def remote_archive():
-    # check if remote canary.txt is available
-    if not os.path.exists(os.path.join(remote_path, 'canary.txt')):
-        print('canary.txt on remote path not found - archiving omitted', flush=True)
-        return
-
     # establish connection to DB
     conn = sqlite3.connect(database_path)
     cur = conn.cursor()
@@ -137,6 +132,11 @@ def remote_archive():
         if start_time + photo_interval <= datetime.now():
             print('Timeout while copying files', flush=True)
             no_timeout = False
+            break
+
+        # check if remote canary.txt is available
+        if not os.path.exists(os.path.join(remote_path, 'canary.txt')):
+            print('canary.txt on remote path not found - archiving omitted', flush=True)
             break
 
         # copy the current file and update DB including error handling
