@@ -259,6 +259,10 @@ def main_loop():
             print('taking photo on SIGUSR1 trigger', flush=True)
             watcher.shoot = False
 
+        day = True
+        if not day_start < now.time() < day_end:
+            day = False
+
         if now >= last_photo + photo_interval:
             # increase last photo time by interval or set it to now if there is more than one delay between then and now
             last_photo += photo_interval
@@ -266,10 +270,9 @@ def main_loop():
                 last_photo = now
 
             factor = 1
-            weekday = day = True
-            if not day_start < now.time() < day_end:
+            weekday = True
+            if not day:
                 factor *= night_factor
-                day = False
             if now.weekday() in weekend_days:
                 factor *= weekend_factor
                 weekday = False
@@ -298,16 +301,16 @@ def main_loop():
                     camera_error += 1   # count errors only at day - avoid reboots over night
                 else:
                     camera_error = 0    # reset error counter at night to avoid endless retries
-            if camera_error > 3:
+            if camera_error >= retry_count:
                 print('rebooting everything')
                 subprocess.run(['sudo', 'reboot'])  # works only on systems with sudo without password (RasPi)
                 sys.exit('reboot triggered')
-            if camera_error > 2:
+            if camera_error >= retry_count - 1:
                 print('rebooting camera', flush=True)
                 restart_camera()
             if camera_error > 0:
                 print('failure while photo taking. The system will be rebooted '
-                      'after {} further failures.'.format(4 - camera_error), flush=True)
+                      'after {} further failures.'.format(retry_count - camera_error), flush=True)
 
         if now >= last_climate + climate_interval:
 
@@ -371,6 +374,9 @@ if __name__ == '__main__':
     if general_conf.get('weekend factor') is None:
         general_conf['weekend factor'] = '12'
         changed = True
+    if general_conf.get('retry count') is None:
+        general_conf['retry count'] = '8'
+        changed = True
 
     if changed:
         with open('BauCam.conf', 'w') as f:
@@ -398,6 +404,7 @@ if __name__ == '__main__':
     min_free_space = general_conf.getint('free space')
     weekend_days = [int(x) for x in general_conf.get('weekend days').split()]
     weekend_factor = general_conf.getint('weekend factor')
+    retry_count = general_conf.getint('retry count')
 
     # catch signals for clean exit
     watcher = KillWatcher()
