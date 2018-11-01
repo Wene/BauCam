@@ -293,8 +293,11 @@ def main_loop():
                 camera_error = 0
                 # use the time after a successful photo to archive files
                 remote_archive()
-            elif day_start < now.time() < day_end:
-                camera_error += 1   # count errors only at day - avoid reboots over night
+            else:
+                if day:
+                    camera_error += 1   # count errors only at day - avoid reboots over night
+                else:
+                    camera_error = 0    # reset error counter at night to avoid endless retries
             if camera_error > 3:
                 print('rebooting everything')
                 subprocess.run(['sudo', 'reboot'])  # works only on systems with sudo without password (RasPi)
