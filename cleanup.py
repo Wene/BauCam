@@ -41,7 +41,17 @@ if args.list:
         print(name)
 
 if args.delete:
-    print("Delete is active")
+    image_rows = list()
+    file_rows = list()
+    for i_rowid, f_rowid, name, local, remote in delete_rows:
+        if i_rowid not in image_rows:
+            image_rows.append(i_rowid)
+        file_rows.append(f_rowid)
+        if remote:
+            pass    # TODO: delete remote files if still existing
+        if local:
+            pass    # TODO: delete local files if still existing
+        # TODO: delete SQL records in files and images
 
 if args.clean:
     numbers = list()
