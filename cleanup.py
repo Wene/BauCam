@@ -18,6 +18,8 @@ if os.path.isfile('BauCam.conf'):
     conf.read('BauCam.conf')
     general_conf = conf['general']
     database_path = os.path.expanduser(general_conf.get('database path'))
+    local_path = os.path.expanduser(general_conf.get('local path'))
+    remote_path = os.path.expanduser(general_conf.get('remote path'))
 else:
     print("BauCam.conf not found!")
     sys.exit(errno.EACCES)
@@ -48,10 +50,23 @@ if args.delete:
             image_rows.append(i_rowid)
         file_rows.append(f_rowid)
         if remote:
-            pass    # TODO: delete remote files if still existing
+            file_path = os.path.join(remote_path, name)
+            if os.path.isfile(file_path):
+                os.remove(file_path)
         if local:
-            pass    # TODO: delete local files if still existing
-        # TODO: delete SQL records in files and images
+            file_path = os.path.join(local_path, name)
+            if os.path.isfile(file_path):
+                os.remove(file_path)
+    query = 'DELETE FROM "images" WHERE "rowid" in (  '
+    for id in image_rows:
+        query += '?, '
+    query = query[:-2] + ');'
+    cur.execute(query, image_rows)
+    query = 'DELETE FROM "files" WHERE "rowid" in (  '
+    for id in file_rows:
+        query += '?, '
+    query = query[:-2] + ');'
+    cur.execute(query, file_rows)
 
 if args.clean:
     numbers = list()
