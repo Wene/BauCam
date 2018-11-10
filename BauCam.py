@@ -201,12 +201,24 @@ def remote_archive():
     conn.close()
 
     # create a backup of the db if enough time left
-    # ToDo: remove old backups from time to time
     if no_timeout and os.path.exists(os.path.join(remote_path, 'canary.txt')):
         try:
             date_str = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
             backup_path = os.path.join(remote_path, image_prefix + 'dbBackup_' + date_str + '.db')
             shutil.copy2(database_path, backup_path)
+
+            # remove old backups
+            all_files = os.listdir(remote_path)
+            my_db_backups = list()
+            for entry in all_files:
+                if entry.startswith(image_prefix+ 'dbBackup_') and entry.endswith('.db'):
+                    my_db_backups.append(entry)
+            for entry in my_db_backups:
+                date = datetime.strptime(entry, image_prefix + 'dbBackup_' + '%Y-%m-%d_%H-%M-%S' + '.db')
+                file_path = os.path.join(remote_path, entry)
+                if date < datetime.now() - timedelta(weeks=4) and file_path != backup_path:
+                    os.remove(file_path)
+
         except FileNotFoundError as e:
             print('Source DB file not found.', e, flush=True)
         except PermissionError as e:
