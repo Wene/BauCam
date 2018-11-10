@@ -286,7 +286,7 @@ def main_loop():
                 print('no photo at {}. interval of {}'.format(interval_count, factor), flush=True)
             interval_count += 1
 
-        if camera_error and now >= last_photo + timedelta(seconds=camera_error * 30):
+        if camera_error and now >= last_photo + timedelta(seconds=camera_error * rescue_interval):
             print('taking a rescue photo after {} failures'.format(camera_error), flush=True)
             photo_now = True
 
@@ -378,6 +378,9 @@ if __name__ == '__main__':
     if general_conf.get('retry count') is None:
         general_conf['retry count'] = '8'
         changed = True
+    if general_conf.get('rescue interval') is None:
+        general_conf['rescue interval'] = '300'
+        changed = True
 
     if changed:
         with open('BauCam.conf', 'w') as f:
@@ -406,6 +409,7 @@ if __name__ == '__main__':
     weekend_days = [int(x) for x in general_conf.get('weekend days').split()]
     weekend_factor = general_conf.getint('weekend factor')
     retry_count = general_conf.getint('retry count')
+    rescue_interval = general_conf.getint('rescue interval')
 
     # catch signals for clean exit
     watcher = KillWatcher()
