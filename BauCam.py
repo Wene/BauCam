@@ -216,7 +216,7 @@ def remote_archive():
             for entry in my_db_backups:
                 date = datetime.strptime(entry, image_prefix + 'dbBackup_' + '%Y-%m-%d_%H-%M-%S' + '.db')
                 file_path = os.path.join(remote_path, entry)
-                if date < datetime.now() - timedelta(weeks=4) and file_path != backup_path:
+                if date < datetime.now() - timedelta(days=db_backup_cleanup_days) and file_path != backup_path:
                     os.remove(file_path)
 
         except FileNotFoundError as e:
@@ -393,6 +393,9 @@ if __name__ == '__main__':
     if general_conf.get('rescue interval') is None:
         general_conf['rescue interval'] = '300'
         changed = True
+    if general_conf.get('db-backup cleanup days') is None:
+        general_conf['db-backup cleanup days'] = '14'
+        changed = True
 
     if changed:
         with open('BauCam.conf', 'w') as f:
@@ -422,6 +425,7 @@ if __name__ == '__main__':
     weekend_factor = general_conf.getint('weekend factor')
     retry_count = general_conf.getint('retry count')
     rescue_interval = general_conf.getint('rescue interval')
+    db_backup_cleanup_days = general_conf.getint('db-backup cleanup days')
 
     # catch signals for clean exit
     watcher = KillWatcher()
