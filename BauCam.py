@@ -200,8 +200,10 @@ def remote_archive():
     conn.commit()
     conn.close()
 
-    # create a backup of the db if enough time left
-    if no_timeout and os.path.exists(os.path.join(remote_path, 'canary.txt')):
+
+# create a backup of the db
+def db_backup():
+    if os.path.exists(os.path.join(remote_path, 'canary.txt')):
         try:
             date_str = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
             backup_path = os.path.join(remote_path, image_prefix + 'dbBackup_' + date_str + '.db')
@@ -255,6 +257,7 @@ def main_loop():
     last_photo = datetime.now() - photo_interval - timedelta(seconds=2)
     last_climate = datetime.now() - climate_interval - timedelta(seconds=2)
     camera_error = 0
+    last_db_backup = datetime.now() - db_backup_interval
 
     interval_count = 1
     while True:
@@ -309,6 +312,9 @@ def main_loop():
                 camera_error = 0
                 # use the time after a successful photo to archive files
                 remote_archive()
+                if now > last_db_backup + db_backup_interval:
+                    db_backup()
+                    last_db_backup = now
             else:
                 if day:
                     camera_error += 1   # count errors only at day - avoid reboots over night
@@ -393,6 +399,9 @@ if __name__ == '__main__':
     if general_conf.get('rescue interval') is None:
         general_conf['rescue interval'] = '300'
         changed = True
+    if general_conf.get('db-backup interval') is None:
+        general_conf['db-backup interval'] = '6'
+        changed = True
     if general_conf.get('db-backup cleanup days') is None:
         general_conf['db-backup cleanup days'] = '14'
         changed = True
@@ -425,6 +434,7 @@ if __name__ == '__main__':
     weekend_factor = general_conf.getint('weekend factor')
     retry_count = general_conf.getint('retry count')
     rescue_interval = general_conf.getint('rescue interval')
+    db_backup_interval = timedelta(hours=general_conf.getint('db-backup interval'))
     db_backup_cleanup_days = general_conf.getint('db-backup cleanup days')
 
     # catch signals for clean exit
