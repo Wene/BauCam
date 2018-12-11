@@ -85,13 +85,15 @@ def extract_exif(file_path):
 def create_database():
     conn = sqlite3.connect(database_path)
     cur = conn.cursor()
-    cur.execute('CREATE TABLE IF NOT EXISTS "images" ("raspi_time" TEXT, "camera_time" TEXT, "gphoto_output" TEXT, '
-                '"to_delete" INTEGER DEFAULT 0);')
-    cur.execute('CREATE TABLE IF NOT EXISTS "files" ("images_rowid" INTEGER NOT NULL, "name" TEXT NOT NULL, '
-                '"local_copy" INTEGER NOT NULL DEFAULT (1), "remote_copy" INTEGER NOT NULL DEFAULT (0));')
-    cur.execute('CREATE TABLE IF NOT EXISTS "tags" ("images_rowid" INTEGER NOT NULL, '
+    cur.execute('CREATE TABLE IF NOT EXISTS "images" ("id" INTEGER PRIMARY KEY, "raspi_time" TEXT, "camera_time" TEXT, '
+                '"gphoto_output" TEXT, "to_delete" INTEGER DEFAULT 0);')
+    cur.execute('CREATE TABLE IF NOT EXISTS "files" ("id" INTEGER PRIMARY KEY, "images_id" INTEGER NOT NULL, '
+                '"name" TEXT NOT NULL, "local_copy" INTEGER NOT NULL DEFAULT (1), '
+                '"remote_copy" INTEGER NOT NULL DEFAULT (0));')
+    cur.execute('CREATE TABLE IF NOT EXISTS "tags" ("id" INTEGER PRIMARY KEY, "images_id" INTEGER NOT NULL, '
                 '"name" TEXT NOT NULL, "value" TEXT);')
-    cur.execute('CREATE TABLE IF NOT EXISTS "climate" ("raspi_time" TEXT, "humidity" REAL, "temperature" REAL);')
+    cur.execute('CREATE TABLE IF NOT EXISTS "climate" ("id" INTEGER PRIMARY KEY, "raspi_time" TEXT, '
+                '"humidity" REAL, "temperature" REAL);')
     conn.commit()
     conn.close()
 
@@ -103,14 +105,14 @@ def store_exif_in_database(timestamp, output, cam_time=None, file_names=[], exif
 
     cur.execute('INSERT INTO images (raspi_time, camera_time, gphoto_output) '
                 'VALUES (?, ?, ?)', (timestamp, cam_time, output))
-    cur.execute('SELECT last_insert_rowid()')
+    cur.execute('SELECT last_insert_id()')
     row_id = cur.fetchone()[0]
     for name in file_names:
-        cur.execute('INSERT INTO files (images_rowid, name, local_copy, remote_copy) VALUES (?, ?, ?, ?)',
+        cur.execute('INSERT INTO files (images_id, name, local_copy, remote_copy) VALUES (?, ?, ?, ?)',
                     (row_id, name, 1, 0))
     for key, value in exif_tags.items():
         if key.startswith('EXIF') and len(str(value)) < 150:
-            cur.execute('INSERT INTO tags (images_rowid, name, value) VALUES (?, ?, ?)', (row_id, key, str(value)))
+            cur.execute('INSERT INTO tags (images_id, name, value) VALUES (?, ?, ?)', (row_id, key, str(value)))
     conn.commit()
     conn.close()
 
@@ -124,12 +126,12 @@ def remote_archive():
     no_timeout = True
 
     # get all names of only local files
-    cur.execute('SELECT "rowid", "name" FROM "files" '
+    cur.execute('SELECT "id", "name" FROM "files" '
                 'WHERE "remote_copy" = 0 AND "local_copy" = 1;')
     rows = cur.fetchall()
 
     # work through all files in the list and copy them to remote_path
-    for rowid, name in rows:
+    for id, name in rows:
 
         # copying many files could take a long time - break here if this took longer than a photo_interval
         if start_time + photo_interval <= datetime.now():
@@ -145,10 +147,10 @@ def remote_archive():
         # copy the current file and update DB including error handling
         try:
             shutil.copy2(os.path.join(local_path, name), remote_path)
-            cur.execute('UPDATE "files" SET "remote_copy" = 1 WHERE "rowid" = ?;', [rowid])
+            cur.execute('UPDATE "files" SET "remote_copy" = 1 WHERE "id" = ?;', [id])
         except FileNotFoundError as e:
             print('Source file not found. Setting local_copy to 0.', e, flush=True)
-            cur.execute('UPDATE "files" SET "local_copy" = 0 WHERE "rowid" = ?;', [rowid])
+            cur.execute('UPDATE "files" SET "local_copy" = 0 WHERE "id" = ?;', [id])
         except PermissionError as e:
             print('Permission denied:', e, flush=True)
             break
@@ -162,12 +164,12 @@ def remote_archive():
             break
 
     # get all names of files in both locations
-    cur.execute('SELECT "rowid", "name" FROM "files" '
+    cur.execute('SELECT "id", "name" FROM "files" '
                 'WHERE "remote_copy" = 1 AND "local_copy" = 1;')
     rows = cur.fetchall()
 
     if no_timeout:  # only continue if no timeout occurred before
-        for rowid, name in rows:
+        for id, name in rows:
 
             # break here if this took longer than a photo_interval
             if start_time + photo_interval <= datetime.now():
@@ -186,10 +188,10 @@ def remote_archive():
             # delete current file including error handling
             try:
                 os.remove(os.path.join(local_path, name))
-                cur.execute('UPDATE "files" SET "local_copy" = 0 WHERE "rowid" = ?;', [rowid])
+                cur.execute('UPDATE "files" SET "local_copy" = 0 WHERE "id" = ?;', [id])
             except FileNotFoundError as e:
                 print('File not found while deleting. Setting local_copy to 0.', e, flush=True)
-                cur.execute('UPDATE "files" SET "local_copy" = 0 WHERE "rowid" = ?;', [rowid])
+                cur.execute('UPDATE "files" SET "local_copy" = 0 WHERE "id" = ?;', [id])
             except Exception as e:
                 print('Unhandled exception:', flush=True)
                 print(type(e), flush=True)
