@@ -105,7 +105,7 @@ def store_exif_in_database(timestamp, output, cam_time=None, file_names=[], exif
 
     cur.execute('INSERT INTO images (raspi_time, camera_time, gphoto_output) '
                 'VALUES (?, ?, ?)', (timestamp, cam_time, output))
-    cur.execute('SELECT last_insert_id()')
+    cur.execute('SELECT last_insert_rowid()')
     row_id = cur.fetchone()[0]
     for name in file_names:
         cur.execute('INSERT INTO files (images_id, name, local_copy, remote_copy) VALUES (?, ?, ?, ?)',
