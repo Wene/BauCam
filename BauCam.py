@@ -85,13 +85,15 @@ def extract_exif(file_path):
 def create_database():
     conn = sqlite3.connect(database_path)
     cur = conn.cursor()
-    cur.execute('CREATE TABLE IF NOT EXISTS "images" ("raspi_time" TEXT, "camera_time" TEXT, "gphoto_output" TEXT, '
-                '"to_delete" INTEGER DEFAULT 0);')
-    cur.execute('CREATE TABLE IF NOT EXISTS "files" ("images_rowid" INTEGER NOT NULL, "name" TEXT NOT NULL, '
-                '"local_copy" INTEGER NOT NULL DEFAULT (1), "remote_copy" INTEGER NOT NULL DEFAULT (0));')
-    cur.execute('CREATE TABLE IF NOT EXISTS "tags" ("images_rowid" INTEGER NOT NULL, '
+    cur.execute('CREATE TABLE IF NOT EXISTS "images" ("id" INTEGER PRIMARY KEY, "raspi_time" TEXT, "camera_time" TEXT, '
+                '"gphoto_output" TEXT, "to_delete" INTEGER DEFAULT 0);')
+    cur.execute('CREATE TABLE IF NOT EXISTS "files" ("id" INTEGER PRIMARY KEY, "images_id" INTEGER NOT NULL, '
+                '"name" TEXT NOT NULL, "local_copy" INTEGER NOT NULL DEFAULT (1), '
+                '"remote_copy" INTEGER NOT NULL DEFAULT (0));')
+    cur.execute('CREATE TABLE IF NOT EXISTS "tags" ("id" INTEGER PRIMARY KEY, "images_id" INTEGER NOT NULL, '
                 '"name" TEXT NOT NULL, "value" TEXT);')
-    cur.execute('CREATE TABLE IF NOT EXISTS "climate" ("raspi_time" TEXT, "humidity" REAL, "temperature" REAL);')
+    cur.execute('CREATE TABLE IF NOT EXISTS "climate" ("id" INTEGER PRIMARY KEY, "raspi_time" TEXT, '
+                '"humidity" REAL, "temperature" REAL);')
     conn.commit()
     conn.close()
 
@@ -103,14 +105,14 @@ def store_exif_in_database(timestamp, output, cam_time=None, file_names=[], exif
 
     cur.execute('INSERT INTO images (raspi_time, camera_time, gphoto_output) '
                 'VALUES (?, ?, ?)', (timestamp, cam_time, output))
-    cur.execute('SELECT last_insert_rowid()')
+    cur.execute('SELECT last_insert_id()')
     row_id = cur.fetchone()[0]
     for name in file_names:
-        cur.execute('INSERT INTO files (images_rowid, name, local_copy, remote_copy) VALUES (?, ?, ?, ?)',
+        cur.execute('INSERT INTO files (images_id, name, local_copy, remote_copy) VALUES (?, ?, ?, ?)',
                     (row_id, name, 1, 0))
     for key, value in exif_tags.items():
         if key.startswith('EXIF') and len(str(value)) < 150:
-            cur.execute('INSERT INTO tags (images_rowid, name, value) VALUES (?, ?, ?)', (row_id, key, str(value)))
+            cur.execute('INSERT INTO tags (images_id, name, value) VALUES (?, ?, ?)', (row_id, key, str(value)))
     conn.commit()
     conn.close()
 
@@ -124,12 +126,12 @@ def remote_archive():
     no_timeout = True
 
     # get all names of only local files
-    cur.execute('SELECT "rowid", "name" FROM "files" '
+    cur.execute('SELECT "id", "name" FROM "files" '
                 'WHERE "remote_copy" = 0 AND "local_copy" = 1;')
     rows = cur.fetchall()
 
     # work through all files in the list and copy them to remote_path
-    for rowid, name in rows:
+    for id, name in rows:
 
         # copying many files could take a long time - break here if this took longer than a photo_interval
         if start_time + photo_interval <= datetime.now():
@@ -145,10 +147,10 @@ def remote_archive():
         # copy the current file and update DB including error handling
         try:
             shutil.copy2(os.path.join(local_path, name), remote_path)
-            cur.execute('UPDATE "files" SET "remote_copy" = 1 WHERE "rowid" = ?;', [rowid])
+            cur.execute('UPDATE "files" SET "remote_copy" = 1 WHERE "id" = ?;', [id])
         except FileNotFoundError as e:
             print('Source file not found. Setting local_copy to 0.', e, flush=True)
-            cur.execute('UPDATE "files" SET "local_copy" = 0 WHERE "rowid" = ?;', [rowid])
+            cur.execute('UPDATE "files" SET "local_copy" = 0 WHERE "id" = ?;', [id])
         except PermissionError as e:
             print('Permission denied:', e, flush=True)
             break
@@ -162,12 +164,12 @@ def remote_archive():
             break
 
     # get all names of files in both locations
-    cur.execute('SELECT "rowid", "name" FROM "files" '
+    cur.execute('SELECT "id", "name" FROM "files" '
                 'WHERE "remote_copy" = 1 AND "local_copy" = 1;')
     rows = cur.fetchall()
 
     if no_timeout:  # only continue if no timeout occurred before
-        for rowid, name in rows:
+        for id, name in rows:
 
             # break here if this took longer than a photo_interval
             if start_time + photo_interval <= datetime.now():
@@ -186,10 +188,10 @@ def remote_archive():
             # delete current file including error handling
             try:
                 os.remove(os.path.join(local_path, name))
-                cur.execute('UPDATE "files" SET "local_copy" = 0 WHERE "rowid" = ?;', [rowid])
+                cur.execute('UPDATE "files" SET "local_copy" = 0 WHERE "id" = ?;', [id])
             except FileNotFoundError as e:
                 print('File not found while deleting. Setting local_copy to 0.', e, flush=True)
-                cur.execute('UPDATE "files" SET "local_copy" = 0 WHERE "rowid" = ?;', [rowid])
+                cur.execute('UPDATE "files" SET "local_copy" = 0 WHERE "id" = ?;', [id])
             except Exception as e:
                 print('Unhandled exception:', flush=True)
                 print(type(e), flush=True)
@@ -200,13 +202,27 @@ def remote_archive():
     conn.commit()
     conn.close()
 
-    # create a backup of the db if enough time left
-    # ToDo: remove old backups from time to time
-    if no_timeout and os.path.exists(os.path.join(remote_path, 'canary.txt')):
+
+# create a backup of the db
+def db_backup():
+    if os.path.exists(os.path.join(remote_path, 'canary.txt')):
         try:
             date_str = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
             backup_path = os.path.join(remote_path, image_prefix + 'dbBackup_' + date_str + '.db')
             shutil.copy2(database_path, backup_path)
+
+            # remove old backups
+            all_files = os.listdir(remote_path)
+            my_db_backups = list()
+            for entry in all_files:
+                if entry.startswith(image_prefix+ 'dbBackup_') and entry.endswith('.db'):
+                    my_db_backups.append(entry)
+            for entry in my_db_backups:
+                date = datetime.strptime(entry, image_prefix + 'dbBackup_' + '%Y-%m-%d_%H-%M-%S' + '.db')
+                file_path = os.path.join(remote_path, entry)
+                if date < datetime.now() - timedelta(days=db_backup_cleanup_days) and file_path != backup_path:
+                    os.remove(file_path)
+
         except FileNotFoundError as e:
             print('Source DB file not found.', e, flush=True)
         except PermissionError as e:
@@ -243,6 +259,7 @@ def main_loop():
     last_photo = datetime.now() - photo_interval - timedelta(seconds=2)
     last_climate = datetime.now() - climate_interval - timedelta(seconds=2)
     camera_error = 0
+    last_db_backup = datetime.now() - db_backup_interval
 
     interval_count = 1
     while True:
@@ -286,7 +303,7 @@ def main_loop():
                 print('no photo at {}. interval of {}'.format(interval_count, factor), flush=True)
             interval_count += 1
 
-        if camera_error and now >= last_photo + timedelta(seconds=camera_error * 30):
+        if camera_error and now >= last_photo + timedelta(seconds=camera_error * rescue_interval):
             print('taking a rescue photo after {} failures'.format(camera_error), flush=True)
             photo_now = True
 
@@ -297,6 +314,9 @@ def main_loop():
                 camera_error = 0
                 # use the time after a successful photo to archive files
                 remote_archive()
+                if now > last_db_backup + db_backup_interval:
+                    db_backup()
+                    last_db_backup = now
             else:
                 if day:
                     camera_error += 1   # count errors only at day - avoid reboots over night
@@ -378,6 +398,15 @@ if __name__ == '__main__':
     if general_conf.get('retry count') is None:
         general_conf['retry count'] = '8'
         changed = True
+    if general_conf.get('rescue interval') is None:
+        general_conf['rescue interval'] = '300'
+        changed = True
+    if general_conf.get('db-backup interval') is None:
+        general_conf['db-backup interval'] = '6'
+        changed = True
+    if general_conf.get('db-backup cleanup days') is None:
+        general_conf['db-backup cleanup days'] = '14'
+        changed = True
 
     if changed:
         with open('BauCam.conf', 'w') as f:
@@ -406,6 +435,9 @@ if __name__ == '__main__':
     weekend_days = [int(x) for x in general_conf.get('weekend days').split()]
     weekend_factor = general_conf.getint('weekend factor')
     retry_count = general_conf.getint('retry count')
+    rescue_interval = general_conf.getint('rescue interval')
+    db_backup_interval = timedelta(hours=general_conf.getint('db-backup interval'))
+    db_backup_cleanup_days = general_conf.getint('db-backup cleanup days')
 
     # catch signals for clean exit
     watcher = KillWatcher()
