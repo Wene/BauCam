@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import configparser
+from datetime import datetime
 import os
 import sqlite3
 
@@ -28,7 +29,32 @@ new_cur.execute('CREATE TABLE IF NOT EXISTS "climate" ("id" INTEGER PRIMARY KEY,
                 '"humidity" REAL, "temperature" REAL);')
 
 # copy climate info - without references
-old_cur.execute('SELECT "rowid", "raspi_time", "humidity", "temperature" FROM "climate"')
+old_cur.execute('SELECT "raspi_time", "humidity", "temperature" FROM "climate" ORDER BY "rowid";')
 climate_rows = old_cur.fetchall()
-new_conn.executemany('INSERT INTO "climate" ("id", "raspi_time", "humidity", "temperature") VALUES (?, ?, ?, ?)',
+new_cur.executemany('INSERT INTO "climate" ("raspi_time", "humidity", "temperature") VALUES (?, ?, ?);',
                      climate_rows)
+
+# copy images and create new references
+old_cur.execute('SELECT "raspi_time", "camera_time", "gphoto_output", "to_delete" FROM "images" ORDER BY "rowid";')
+images_rows = old_cur.fetchall()
+ids = dict()
+for row in images_rows:
+    timestamp = datetime.strptime(row[0], '%Y-%m-%d %H:%M:%S.%f')
+    key = timestamp.strftime('%Y-%m-%d_%H-%M-%S')
+    new_cur.execute('INSERT INTO "images" ("raspi_time", "camera_time", "gphoto_output", "to_delete") '
+                    'VALUES (?, ?, ?, ?);', row)
+    new_cur.execute('SELECT last_insert_rowid();')
+    row_id = new_cur.fetchone()[0]
+    ids[key] = row_id
+
+old_cur.execute('SELECT "name", "local_copy", "remote_copy" FROM "files";')
+files = old_cur.fetchall()
+for record in files:
+    key = record[0][5:24]
+    if key in ids:
+        foreign_key = ids[key]
+    else:
+        print('ID for key {} not found', key)
+        foreign_key = 0
+    new_cur.execute('INSERT INTO "files" ("images_id", "name", "local_copy", "remote_copy") '
+                    'VALUES (?, ?, ?, ?);', [foreign_key] + record)
