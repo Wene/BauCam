@@ -57,4 +57,9 @@ for record in files:
         print('ID for key {} not found', key)
         foreign_key = 0
     new_cur.execute('INSERT INTO "files" ("images_id", "name", "local_copy", "remote_copy") '
-                    'VALUES (?, ?, ?, ?);', [foreign_key] + record)
+                    'VALUES (?, ?, ?, ?);', (foreign_key,) + record)  # comma needed after one record for a valid tuple
+
+old_conn.close()
+new_conn.commit()
+new_conn.close()
+
