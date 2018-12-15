@@ -31,24 +31,24 @@ else:
     print("Database not found!")
     sys.exit(errno.EACCES)
 
-cur.execute('SELECT "i"."rowid", "f"."rowid", "f"."name", "f"."local_copy", "f"."remote_copy" '
+cur.execute('SELECT "i"."id", "f"."id", "f"."name", "f"."local_copy", "f"."remote_copy" '
             'FROM "files" AS "f", "images" AS "i" '
-            'WHERE "i"."rowid" = "f"."images_rowid" AND "i"."to_delete" = 1;')
+            'WHERE "i"."id" = "f"."images_id" AND "i"."to_delete" = 1 AND "keep_forever" != 1;')
 delete_rows = cur.fetchall()
-cur.execute('SELECT "rowid" FROM images WHERE rowid NOT IN (SELECT "images_rowid" FROM "files");')
+cur.execute('SELECT "id" FROM images WHERE id NOT IN (SELECT "images_id" FROM "files");')
 clean_rows = cur.fetchall()
 
 if args.list:
-    for i_rowid, f_rowid, name, local, remote in delete_rows:
+    for i_id, f_id, name, local, remote in delete_rows:
         print(name)
 
 if args.delete:
     image_rows = list()
     file_rows = list()
-    for i_rowid, f_rowid, name, local, remote in delete_rows:
-        if i_rowid not in image_rows:
-            image_rows.append(i_rowid)
-        file_rows.append(f_rowid)
+    for i_id, f_id, name, local, remote in delete_rows:
+        if i_id not in image_rows:
+            image_rows.append(i_id)
+        file_rows.append(f_id)
         if remote:
             file_path = os.path.join(remote_path, name)
             if os.path.isfile(file_path):
@@ -57,12 +57,12 @@ if args.delete:
             file_path = os.path.join(local_path, name)
             if os.path.isfile(file_path):
                 os.remove(file_path)
-    query = 'DELETE FROM "images" WHERE "rowid" in (  '
+    query = 'DELETE FROM "images" WHERE "id" in (  '
     for id in image_rows:
         query += '?, '
     query = query[:-2] + ');'
     cur.execute(query, image_rows)
-    query = 'DELETE FROM "files" WHERE "rowid" in (  '
+    query = 'DELETE FROM "files" WHERE "id" in (  '
     for id in file_rows:
         query += '?, '
     query = query[:-2] + ');'
@@ -72,7 +72,7 @@ if args.clean:
     numbers = list()
     for id, in clean_rows:
         numbers.append(id)
-    query = 'DELETE FROM "images" WHERE "rowid" in (  '
+    query = 'DELETE FROM "images" WHERE "id" in (  '
     for i in numbers:
         query += '?, '
     query = query[:-2] + ');'

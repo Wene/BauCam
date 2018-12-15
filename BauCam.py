@@ -86,10 +86,10 @@ def create_database():
     conn = sqlite3.connect(database_path)
     cur = conn.cursor()
     cur.execute('CREATE TABLE IF NOT EXISTS "images" ("id" INTEGER PRIMARY KEY, "raspi_time" TEXT, "camera_time" TEXT, '
-                '"gphoto_output" TEXT, "to_delete" INTEGER DEFAULT 0);')
+                '"gphoto_output" TEXT, "to_delete" INTEGER DEFAULT 0, "keep_forever" INTEGER DEFAULT 0);')
     cur.execute('CREATE TABLE IF NOT EXISTS "files" ("id" INTEGER PRIMARY KEY, "images_id" INTEGER NOT NULL, '
-                '"name" TEXT NOT NULL, "local_copy" INTEGER NOT NULL DEFAULT (1), '
-                '"remote_copy" INTEGER NOT NULL DEFAULT (0));')
+                '"name" TEXT NOT NULL, "local_copy" INTEGER NOT NULL DEFAULT 1, '
+                '"remote_copy" INTEGER NOT NULL DEFAULT 0);')
     cur.execute('CREATE TABLE IF NOT EXISTS "tags" ("id" INTEGER PRIMARY KEY, "images_id" INTEGER NOT NULL, '
                 '"name" TEXT NOT NULL, "value" TEXT);')
     cur.execute('CREATE TABLE IF NOT EXISTS "climate" ("id" INTEGER PRIMARY KEY, "raspi_time" TEXT, '
