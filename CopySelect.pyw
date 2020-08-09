@@ -20,6 +20,7 @@ class Form(QWidget):
         lbl_skip = QLabel('Wochentage auslassen (Sa, So)')
         self.edt_time = QLineEdit()
         self.edt_tolerance = QLineEdit()
+        self.edt_tolerance.setValidator(QIntValidator(0, 120))
         self.edt_skip = QLineEdit()
         main_layout.addWidget(lbl_time, 0, 0)
         main_layout.addWidget(self.edt_time, 0, 1)
@@ -32,13 +33,18 @@ class Form(QWidget):
         self.btn_solve.clicked.connect(self.solve)
         main_layout.addWidget(self.btn_solve, 3, 1)
 
+        self.edt_result = QPlainTextEdit()
+        self.edt_result.setReadOnly(True)
+        self.edt_result.setUndoRedoEnabled(False)
+        main_layout.addWidget(self.edt_result, 4, 0, 1, 2)
+
         self.btn_copy = QPushButton('K&opieren...')
         self.btn_copy.clicked.connect(self.copy)
-        main_layout.addWidget(self.btn_copy, 4, 1)
+        main_layout.addWidget(self.btn_copy, 5, 1)
 
         self.btn_quit = QPushButton('B&eenden')
         self.btn_quit.clicked.connect(self.close)
-        main_layout.addWidget(self.btn_quit, 5, 1)
+        main_layout.addWidget(self.btn_quit, 6, 1)
 
         self.resize(self.settings.value('windowSize', QSize(50, 50)))
         self.move(self.settings.value('windowPosition', QPoint(50, 50)))
@@ -54,7 +60,12 @@ class Form(QWidget):
         self.settings.setValue('skip', self.edt_skip.text())
 
     def solve(self):
-        pass
+        time = QTime.fromString(self.edt_time.text(), 'hh:mm')
+        if not time.isValid():
+            QMessageBox.critical(self, 'Fehler', 'Ungültige Zeit eingegeben')
+            return
+        minutes = int(self.edt_tolerance.text())
+        print(minutes, 'minutes')
 
     def copy(self):
         path = QFileDialog.getExistingDirectory(self, 'Zielverzeichnis')
