@@ -86,7 +86,8 @@ class Form(QWidget):
             self.lbl_db.setText(file_name)
             db_connection = sqlite3.connect(path)
             db_cursor = db_connection.cursor()
-            db_cursor.execute('SELECT "id", "raspi_time" from "images" order by "id"')
+            db_cursor.execute('SELECT i.id, i.raspi_time, f.name FROM images AS i, files AS f '
+                              'WHERE i.id = f.images_id ORDER BY i.id')
             rows = db_cursor.fetchall()
             db_cursor.close()
             db_connection.close()
@@ -95,7 +96,7 @@ class Form(QWidget):
                 id = int(image[0])
                 time_str = image[1].split('.')[0]
                 time = QDateTime.fromString(time_str, 'yyyy-MM-dd hh:mm:ss')
-                self.data[id] = time
+                self.data[id] = (time, image[2])
 
     def solve(self):
         self.edt_result.clear()
@@ -110,7 +111,8 @@ class Form(QWidget):
         result_today = {}
         index: int
         date_time: QDateTime
-        for index, date_time in self.data.items():
+        for index, data_set in self.data.items():
+            date_time = data_set[0]
             week_day = date_time.toString('ddd')[0:2]
             if week_day in self.edt_skip.text():
                 continue
@@ -152,9 +154,6 @@ class Form(QWidget):
         path = QFileDialog.getExistingDirectory(self, 'Zielverzeichnis', last_path)
         if path:
             self.settings.setValue('target_path', path)
-            print('Path:', path)
-        else:
-            print('no path')
 
 
 if __name__ == '__main__':
