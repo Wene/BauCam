@@ -127,8 +127,10 @@ class Form(QWidget):
             self.source_path = path
 
     def copy(self):
-        path = QFileDialog.getExistingDirectory(self, 'Zielverzeichnis')
+        last_path = self.settings.value('target_path', '')
+        path = QFileDialog.getExistingDirectory(self, 'Zielverzeichnis', last_path)
         if path:
+            self.settings.setValue('target_path', path)
             print('Path:', path)
         else:
             print('no path')
