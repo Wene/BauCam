@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 import os
+import shutil
+import sqlite3
+
 from PyQt5.QtCore import *
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
-import sqlite3
 
 
 class Form(QWidget):
@@ -87,7 +89,7 @@ class Form(QWidget):
             db_connection = sqlite3.connect(path)
             db_cursor = db_connection.cursor()
             db_cursor.execute('SELECT i.id, i.raspi_time, f.name FROM images AS i, files AS f '
-                              'WHERE i.id = f.images_id ORDER BY i.id')
+                              'WHERE i.id = f.images_id AND f.name like "%.jpg" ORDER BY i.id')
             rows = db_cursor.fetchall()
             db_cursor.close()
             db_connection.close()
@@ -151,9 +153,23 @@ class Form(QWidget):
 
     def copy(self):
         last_path = self.settings.value('target_path', '')
-        path = QFileDialog.getExistingDirectory(self, 'Zielverzeichnis', last_path)
-        if path:
-            self.settings.setValue('target_path', path)
+        target_path = QFileDialog.getExistingDirectory(self, 'Zielverzeichnis', last_path)
+        if target_path:
+            self.settings.setValue('target_path', target_path)
+            good_count = 0
+            bad_count = 0
+            for index in self.result_ids:
+                file_name = self.data[index][1]
+                file_path = os.path.join(self.source_path, file_name)
+                if os.path.exists(file_path):
+                    target_path = os.path.join(target_path, file_name)
+                    if not os.path.exists(target_path):
+                        shutil.copyfile(file_path, target_path)
+                    good_count += 1
+                else:
+                    self.edt_result.appendPlainText(f'Datei {file_path} nicht gefunden')
+                    bad_count += 1
+            self.edt_result.appendPlainText(f'{good_count} Dateien kopiert, {bad_count} Dateien nicht gefunden')
 
 
 if __name__ == '__main__':
