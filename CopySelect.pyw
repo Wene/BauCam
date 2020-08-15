@@ -104,19 +104,40 @@ class Form(QWidget):
         if not search_time.isValid():
             QMessageBox.critical(self, 'Fehler', 'Ungültige Zeit eingegeben')
             return
-        search_tolerance_seconds = int(self.edt_tolerance.text()) * 60
-        min_time = QTime.addSecs(search_time, -search_tolerance_seconds)
-        max_time = QTime.addSecs(search_time, search_tolerance_seconds)
 
+        max_tolerance_seconds = int(self.edt_tolerance.text()) * 60
+        current_date = QDate()
+        result_today = {}
         index: int
-        date: QDateTime
-        for index, date in self.data.items():
-            week_day = date.toString('ddd')[0:2]
-            time = date.time()
-            if min_time <= time <= max_time and week_day not in self.edt_skip.text():
-                self.result_ids.append(index)
-                text = str(index) + ': ' + date.toString()
-                self.edt_result.appendPlainText(text)
+        date_time: QDateTime
+        for index, date_time in self.data.items():
+            week_day = date_time.toString('ddd')[0:2]
+            if week_day in self.edt_skip.text():
+                continue
+            time = date_time.time()
+            date = date_time.date()
+
+            # store best hit if the date has changed
+            if date != current_date:
+                if len(result_today) > 0:
+                    best_result = sorted(result_today)[0]
+                    result = result_today[best_result]
+                    self.result_ids.append(result[0])
+                    text = str(result[0]) + ': ' + result[1].toString()
+                    self.edt_result.appendPlainText(text)
+                    result_today.clear()
+                current_date = date
+
+            # filter date_time's in tolerance range
+            deviation_seconds = 0
+            while deviation_seconds <= max_tolerance_seconds:
+                min_time = QTime.addSecs(search_time, -deviation_seconds)
+                max_time = QTime.addSecs(search_time, deviation_seconds)
+                if min_time <= time <= max_time:
+                    result_today[deviation_seconds] = (index, date_time)
+                    break
+                else:
+                    deviation_seconds += 60
         self.edt_result.appendPlainText(f'Total: {len(self.result_ids)}')
 
     def source_select(self):
