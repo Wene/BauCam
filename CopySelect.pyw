@@ -14,6 +14,7 @@ class Form(QWidget):
         self.setWindowTitle(title)
 
         self.data = {}
+        self.result_ids = []
 
         main_layout = QGridLayout(self)
 
@@ -46,19 +47,28 @@ class Form(QWidget):
         self.edt_result.setUndoRedoEnabled(False)
         main_layout.addWidget(self.edt_result, 5, 0, 1, 2)
 
+        self.lbl_source = QLabel('Kein Quellverzeichnis ausgewählt')
+        main_layout.addWidget(self.lbl_source, 6, 0)
+        self.btn_source = QPushButton('&Quellverzeichnis...')
+        self.btn_source.clicked.connect(self.source_select)
+        main_layout.addWidget(self.btn_source, 6, 1)
+
         self.btn_copy = QPushButton('K&opieren...')
         self.btn_copy.clicked.connect(self.copy)
-        main_layout.addWidget(self.btn_copy, 6, 1)
+        main_layout.addWidget(self.btn_copy, 7, 1)
 
         self.btn_quit = QPushButton('B&eenden')
         self.btn_quit.clicked.connect(self.close)
-        main_layout.addWidget(self.btn_quit, 7, 1)
+        main_layout.addWidget(self.btn_quit, 8, 1)
 
         self.resize(self.settings.value('windowSize', QSize(50, 50)))
         self.move(self.settings.value('windowPosition', QPoint(50, 50)))
         self.edt_time.setText(self.settings.value('time', '12:00'))
         self.edt_tolerance.setText(self.settings.value('tolerance', '60'))
         self.edt_skip.setText(self.settings.value('skip', 'Sa, So'))
+        self.source_path = self.settings.value('source_path', '')
+        if self.source_path:
+            self.lbl_source.setText(self.source_path)
 
     def closeEvent(self, a0: QCloseEvent) -> None:
         self.settings.setValue('windowSize', self.size())
@@ -89,6 +99,7 @@ class Form(QWidget):
 
     def solve(self):
         self.edt_result.clear()
+        self.result_ids.clear()
         search_time = QTime.fromString(self.edt_time.text(), 'hh:mm')
         if not search_time.isValid():
             QMessageBox.critical(self, 'Fehler', 'Ungültige Zeit eingegeben')
@@ -97,17 +108,23 @@ class Form(QWidget):
         min_time = QTime.addSecs(search_time, -search_tolerance_seconds)
         max_time = QTime.addSecs(search_time, search_tolerance_seconds)
 
-        count = 0
         index: int
         date: QDateTime
         for index, date in self.data.items():
             week_day = date.toString('ddd')[0:2]
             time = date.time()
-            if time >= min_time and time <= max_time and week_day not in self.edt_skip.text():
+            if min_time <= time <= max_time and week_day not in self.edt_skip.text():
+                self.result_ids.append(index)
                 text = str(index) + ': ' + date.toString()
                 self.edt_result.appendPlainText(text)
-                count += 1
-        self.edt_result.appendPlainText(f'Total: {count}')
+        self.edt_result.appendPlainText(f'Total: {len(self.result_ids)}')
+
+    def source_select(self):
+        path = QFileDialog.getExistingDirectory(self, 'Quellverzeichnis', self.source_path)
+        if path:
+            self.settings.setValue('source_path', path)
+            self.lbl_source.setText(path)
+            self.source_path = path
 
     def copy(self):
         path = QFileDialog.getExistingDirectory(self, 'Zielverzeichnis')
