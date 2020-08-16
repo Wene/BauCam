@@ -174,6 +174,7 @@ class Form(QWidget):
             self.copy_state['good_count'] = 0
             self.copy_state['bad_count'] = 0
             self.copy_timer.start()
+            self.enable_ui(False)
 
     def copy_one(self):
         target_path = self.copy_state['target_path']
@@ -197,6 +198,16 @@ class Form(QWidget):
                                             f'{self.copy_state["bad_count"]} Dateien nicht gefunden')
             self.pro_copy.setVisible(False)
             self.copy_timer.stop()
+            self.enable_ui(True)
+
+    def enable_ui(self, enable_state: bool):
+        self.btn_copy.setEnabled(enable_state)
+        self.btn_solve.setEnabled(enable_state)
+        self.btn_source.setEnabled(enable_state)
+        self.btn_load_db.setEnabled(enable_state)
+        self.edt_skip.setEnabled(enable_state)
+        self.edt_time.setEnabled(enable_state)
+        self.edt_tolerance.setEnabled(enable_state)
 
 
 if __name__ == '__main__':
