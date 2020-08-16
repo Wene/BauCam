@@ -17,6 +17,13 @@ class Form(QWidget):
 
         self.data = {}
         self.result_ids = []
+        self.copy_state = {}
+
+        self.copy_timer = QTimer(self)
+        self.copy_timer.setInterval(10)
+        self.copy_timer.setSingleShot(False)
+        self.copy_timer.stop()
+        self.copy_timer.timeout.connect(self.copy_one)
 
         main_layout = QGridLayout(self)
 
@@ -58,6 +65,9 @@ class Form(QWidget):
         self.btn_copy = QPushButton('K&opieren...')
         self.btn_copy.clicked.connect(self.copy)
         main_layout.addWidget(self.btn_copy, 7, 1)
+        self.pro_copy = QProgressBar()
+        self.pro_copy.setVisible(False)
+        main_layout.addWidget(self.pro_copy, 7, 0)
 
         self.btn_quit = QPushButton('B&eenden')
         self.btn_quit.clicked.connect(self.close)
@@ -156,20 +166,37 @@ class Form(QWidget):
         target_path = QFileDialog.getExistingDirectory(self, 'Zielverzeichnis', last_path)
         if target_path:
             self.settings.setValue('target_path', target_path)
-            good_count = 0
-            bad_count = 0
-            for index in self.result_ids:
-                file_name = self.data[index][1]
-                file_path = os.path.join(self.source_path, file_name)
-                if os.path.exists(file_path):
-                    target_path = os.path.join(target_path, file_name)
-                    if not os.path.exists(target_path):
-                        shutil.copyfile(file_path, target_path)
-                    good_count += 1
-                else:
-                    self.edt_result.appendPlainText(f'Datei {file_path} nicht gefunden')
-                    bad_count += 1
-            self.edt_result.appendPlainText(f'{good_count} Dateien kopiert, {bad_count} Dateien nicht gefunden')
+            self.pro_copy.setMaximum(len(self.result_ids))
+            self.pro_copy.setValue(0)
+            self.pro_copy.setVisible(True)
+            self.copy_state['target_path'] = target_path
+            self.copy_state['result_idx'] = 0
+            self.copy_state['good_count'] = 0
+            self.copy_state['bad_count'] = 0
+            self.copy_timer.start()
+
+    def copy_one(self):
+        target_path = self.copy_state['target_path']
+        result_idx = self.copy_state['result_idx']
+        if result_idx < len(self.result_ids):
+            index = self.result_ids[result_idx]
+            file_name = self.data[index][1]
+            file_path = os.path.join(self.source_path, file_name)
+            if os.path.exists(file_path):
+                target_path = os.path.join(target_path, file_name)
+                if not os.path.exists(target_path):
+                    shutil.copyfile(file_path, target_path)
+                self.copy_state['good_count'] += 1
+            else:
+                self.edt_result.appendPlainText(f'Datei {file_path} nicht gefunden')
+                self.copy_state['bad_count'] += 1
+            self.copy_state['result_idx'] += 1
+            self.pro_copy.setValue(result_idx)
+        else:
+            self.edt_result.appendPlainText(f'{self.copy_state["good_count"]} Dateien kopiert, '
+                                            f'{self.copy_state["bad_count"]} Dateien nicht gefunden')
+            self.pro_copy.setVisible(False)
+            self.copy_timer.stop()
 
 
 if __name__ == '__main__':
