@@ -39,8 +39,10 @@ if '__main__' == __name__:
     dates, values = db.get_climate()
     del db
     fig, ax = plt.subplots()
+    fig.subplots_adjust(top=0.95, bottom=0.15, left=0.05, right=0.98)
     ax.plot(dates, values)
+    ax.legend(('Humidity [%]', 'Temperature [°C]'))
     ax.set(xlabel='Date', ylabel='Value', title='Climate data')
-    ax.xaxis.set_major_formatter(DateFormatter('%Y-%m-%d %H:%M'))
+    ax.xaxis.set_major_formatter(DateFormatter('%Y-%m-%d %H:%M:%S'))
     plt.setp(ax.get_xticklabels(), rotation=45)
     plt.show()
