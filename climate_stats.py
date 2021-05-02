@@ -23,6 +23,10 @@ class DB:
         values = []
         for entry in result:
             date_str = entry[0]
+            humidity = entry[1]
+            temperature = entry[2]
+            if humidity > 100:
+                continue
             date = datetime.fromisoformat(date_str)
             date_num = date2num(date)
             dates.append(date_num)
